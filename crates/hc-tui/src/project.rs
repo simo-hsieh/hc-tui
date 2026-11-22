@@ -138,11 +138,23 @@ fn agent_record(term: &Terminal) -> Option<AgentRecord<'_>> {
 /// keeps the full cwd so basenames colliding stay distinct; the label is
 /// what the workspace row displays.
 /// True when a grouping label looks like a machine-generated identity
-/// (32-char hex `opaque_id`, 36-char UUID, or 6+ digit numeric ID) rather
+/// (32-char hex `opaque_id`, `sp`/`tb`-prefixed hex IDs like
+/// `spb69fd5d2d701b04...`, 36-char UUID, or 6+ digit numeric ID) rather
 /// than a human-chosen name.
 pub(crate) fn is_opaque_id(value: &str) -> bool {
     let bytes = value.as_bytes();
     if bytes.len() == 32 && bytes.iter().all(|b| b.is_ascii_hexdigit()) {
+        return true;
+    }
+    let hex_body = value
+        .strip_prefix("sp")
+        .or_else(|| value.strip_prefix("tb"))
+        .unwrap_or(value);
+    let hex_bytes = hex_body.as_bytes();
+    if hex_bytes.len() >= 12
+        && hex_bytes.iter().all(|b| b.is_ascii_hexdigit())
+        && hex_bytes.iter().any(|b| b.is_ascii_digit())
+    {
         return true;
     }
     if bytes.len() >= 6 && bytes.iter().all(|b| b.is_ascii_digit()) {

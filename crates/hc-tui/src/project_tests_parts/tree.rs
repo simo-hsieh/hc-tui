@@ -184,12 +184,19 @@ fn opaque_herdr_space_ids_fall_back_to_folder_name_while_preserving_grouping() {
         "herdr.space".into(),
         "550e8400-e29b-41d4-a716-446655440000".into(),
     );
-    let projected = project(&view(vec![a, b, c], vec![]), Some("t1"));
+    let mut d = term("t4");
+    d.cwd = "/home/user/herdr-tui".into();
+    d.labels
+        .insert("herdr.space".into(), "spb69fd5d2d701b04f".into());
+    let projected = project(&view(vec![a, b, c, d], vec![]), Some("t1"));
     let labels: Vec<&str> = projected
         .snapshot
         .workspaces
         .iter()
         .map(|w| w.label.as_str())
         .collect();
-    assert_eq!(labels, ["acme-shop", "billing-api", "docs-site"]);
+    assert_eq!(
+        labels,
+        ["acme-shop", "billing-api", "docs-site", "herdr-tui"]
+    );
 }

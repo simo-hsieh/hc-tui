@@ -147,16 +147,17 @@ pub fn read(terms: &[&Terminal], document: &Value, machine: Option<&str>) -> Vec
             if !mapped.is_empty() {
                 let name = text(space, "name");
                 let folder = text(space, "folder");
-                let label = if name.is_empty() {
-                    basename(&folder).to_owned()
-                } else {
+                let named = !name.is_empty() && !crate::project::is_opaque_id(&name);
+                let label = if named {
                     name.clone()
+                } else {
+                    basename(&folder).to_owned()
                 };
                 spaces.push(Space {
                     from_app: true,
                     id: identity("space", &id),
                     name: label,
-                    custom_name: !name.is_empty(),
+                    custom_name: named,
                     folder,
                     tabs: mapped,
                 });
