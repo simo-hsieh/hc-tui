@@ -166,10 +166,14 @@ pub fn read(terms: &[&Terminal], document: &Value, machine: Option<&str>) -> Vec
     }
     // Creation order is the reference's fallback, with the numeric terminal
     // id resolving equal timestamps. Keys retain raw (not display-cleaned) text.
+    // Terminals already killed outside hc-tui (e.g. closed in Herdr.app or via
+    // `hc kill`) and absent from the app document must not resurrect as ghost
+    // spaces.
     let mut rest = terms
         .iter()
         .copied()
         .filter(|t| !used.contains(&t.address))
+        .filter(|t| !(t.state == "finished" && t.reason.as_deref() == Some("killed")))
         .collect::<Vec<_>>();
     rest.sort_by_key(|t| {
         (
@@ -190,26 +194,40 @@ pub fn read(terms: &[&Terminal], document: &Value, machine: Option<&str>) -> Vec
     let mut pending = BTreeMap::<(usize, String), Vec<String>>::new();
     for terminal in rest {
         let (key, label) = crate::project::space_of(terminal);
-        let at = *positions.entry(key.clone()).or_insert_with(|| {
-            let has_named_space = terminal
+        let folder = crate::project::repository::folder(terminal);
+        let folder_norm = folder.trim_end_matches('/');
+        let has_named_space = terminal
+            .labels
+            .get("herdr.space.name")
+            .is_some_and(|n| !n.is_empty())
+            || terminal
                 .labels
-                .get("herdr.space.name")
-                .is_some_and(|n| !n.is_empty())
-                || terminal
-                    .labels
-                    .get("herdr.space")
-                    .is_some_and(|s| !crate::project::is_opaque_id(s));
+                .get("herdr.space")
+                .is_some_and(|s| !crate::project::is_opaque_id(s));
+        let at = if let Some(&existing) = positions.get(&key) {
+            existing
+        } else if !has_named_space
+            && !folder_norm.is_empty()
+            && let Some(app_idx) = spaces
+                .iter()
+                .position(|s| s.from_app && s.folder.trim_end_matches('/') == folder_norm)
+        {
+            app_idx
+        } else {
+            let idx = spaces.len();
             spaces.push(Space {
                 from_app: false,
                 id: key.clone(),
                 name: label,
                 custom_name: has_named_space,
-                folder: crate::project::repository::folder(terminal).to_owned(),
+                folder: folder.to_owned(),
                 tabs: Vec::new(),
             });
-            spaces.len() - 1
-        });
-        let tab_id = format!("{key}/{}", crate::project::tab_key_of(terminal));
+            positions.insert(key.clone(), idx);
+            idx
+        };
+        let space_key = &spaces[at].id;
+        let tab_id = format!("{space_key}/{}", crate::project::tab_key_of(terminal));
         let tabs = &mut spaces[at].tabs;
         if let Some(tab) = tabs.iter_mut().find(|t| t.id == tab_id) {
             pending
