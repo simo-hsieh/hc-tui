@@ -219,8 +219,16 @@ pub fn read(terms: &[&Terminal], document: &Value, machine: Option<&str>) -> Vec
                 .filter(|label| {
                     !(label.len() == 32 && label.bytes().all(|b| b.is_ascii_hexdigit()))
                 })
-                .cloned()
-                .unwrap_or_default();
+                .map(String::as_str);
+            let name = terminal
+                .labels
+                .get("herdr.tab.name")
+                .filter(|_| terminal.labels.contains_key("herdr.tab"))
+                .map(String::as_str)
+                .filter(|name| !name.is_empty())
+                .or(name)
+                .unwrap_or_default()
+                .to_owned();
             tabs.push(Tab {
                 id: tab_id,
                 custom_name: !name.is_empty(),

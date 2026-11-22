@@ -28,6 +28,10 @@ agreed by CAS before promotion. Concurrent clients reuse that agreement;
 old layout keys redirect to the adopted identities. Names and existing label
 fields are preserved. The foreign `herdr-app` document is never rewritten.
 Placement and method/schema compatibility are checked before spawning.
+For a single-terminal delegate tab started through `hc run`, give it a unique
+`herdr.tab` label. Set `herdr.tab.name` on that terminal to change the label-based
+tab title without changing its identity. This does not rename tabs in either
+client's layout document.
 
 Closing records a tombstone and prunes the tree in the same CAS write. Focus
 stays in a surviving pane, then moves to the adjacent tab. Close confirmation

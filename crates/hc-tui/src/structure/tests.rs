@@ -85,6 +85,27 @@ fn newly_labelled_terminal_joins_document_space_and_tab_before_app_adoption() {
 }
 
 #[test]
+fn changing_a_labelled_tab_title_keeps_its_identity_and_members() {
+    let mut worker = terminal("t1");
+    worker.labels.insert("herdr.tab".into(), "worker".into());
+    let original = read(&[&worker], &Value::Null, None)
+        .remove(0)
+        .tabs
+        .remove(0);
+    worker
+        .labels
+        .insert("herdr.tab.name".into(), "worker done".into());
+    let renamed = read(&[&worker], &Value::Null, None)
+        .remove(0)
+        .tabs
+        .remove(0);
+    assert_eq!(renamed.name, "worker done");
+    assert!(renamed.custom_name);
+    assert_eq!(renamed.id, original.id);
+    assert_eq!(renamed.root.terminals(), ["t1"]);
+}
+
+#[test]
 fn restored_ids_remain_unique_through_split_and_close() {
     let (mut layout, mut ids) = Tree::pane("t1").layout(None);
     let first = layout.focused();

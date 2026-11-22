@@ -19,6 +19,7 @@ async fn reporter(
 ) -> String {
     client.terminal_run(RunParams {
         name: Some(name.into()),
+        labels: [("herdr.tab".into(), name.into())].into(),
         parent,
         cwd: Some(core.work.to_string_lossy().into_owned()),
         argv: vec!["sh".into(), "-c".into(), format!("printf '\\033]7501;state={state}:app={name}\\033\\\\'; while read line; do :; done")],
@@ -34,7 +35,7 @@ async fn real_core_worker_tree_and_clean_detach() {
         .await
         .unwrap();
     let boss = reporter(&core, &client, "treeboss", "idle", None).await;
-    reporter(&core, &client, "treeworker", "blocked", Some(boss)).await;
+    let worker = reporter(&core, &client, "treeworker", "blocked", Some(boss)).await;
     reporter(&core, &client, "treesolo", "working", None).await;
     let Endpoint::Local(local) = &core.endpoint else {
         panic!("local scratch");
@@ -62,6 +63,23 @@ async fn real_core_worker_tree_and_clean_detach() {
     )
     .await;
     assert!(ready, "tree not rendered:\n{}", tui.screen());
+    let renamed = std::process::Command::new(scratch::core_binary())
+        .env_clear()
+        .envs(env.iter().cloned())
+        .args(["label", &worker, "herdr.tab.name=worker done"])
+        .output()
+        .expect("set delegate title on scratch core");
+    assert!(renamed.status.success(), "{renamed:?}");
+    assert!(
+        pty::until(
+            &mut tui,
+            |vt, _| pty::screen(vt).contains("worker done"),
+            "updated delegate tab title",
+        )
+        .await,
+        "delegate title not rendered:\n{}",
+        tui.screen(),
+    );
     tui.type_keys(b"\x02q");
     let deadline = Instant::now() + pty::DEADLINE;
     loop {
