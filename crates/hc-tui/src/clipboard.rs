@@ -317,7 +317,11 @@ fn read_macos_clipboard_image(env: &ClipboardEnv, timeout: Duration) -> Clipboar
             }
             _ => ClipboardRead::None,
         },
-        _ => ClipboardRead::None,
+        ReaderOutcome::Data(bytes) | ReaderOutcome::Oversized(bytes) => {
+            // macOS uses the temp file, never a tool's stdout payload.
+            drop(bytes);
+            ClipboardRead::None
+        }
     };
     let _ = std::fs::remove_file(&path);
     image

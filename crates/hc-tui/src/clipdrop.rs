@@ -63,6 +63,7 @@ fn unescape_drop_path(text: &str) -> String {
 /// parser's). Every `file://` line is a candidate; the action word
 /// (`copy`/`cut`) and `#` comments never parse as URIs on their own.
 /// The first candidate that reads as an image wins.
+#[cfg(any(target_os = "linux", test))]
 pub(crate) fn image_paths_from_clipboard_text(text: &str) -> Vec<(PathBuf, &'static str)> {
     let mut paths = Vec::new();
     if let Some(found) = image_path_from_paste(text) {
@@ -88,6 +89,7 @@ pub(crate) fn image_paths_from_clipboard_text(text: &str) -> Vec<(PathBuf, &'sta
 /// One `file://` URI line decoded into a local absolute path: empty or
 /// `localhost` authority only, `%HH` sequences decoded, anything else
 /// rejected.
+#[cfg(any(target_os = "linux", test))]
 fn local_path_from_file_uri(line: &str) -> Option<PathBuf> {
     let rest = line.strip_prefix("file://")?;
     let slash = rest.find('/')?;
@@ -102,6 +104,7 @@ fn local_path_from_file_uri(line: &str) -> Option<PathBuf> {
 
 /// URI `%HH` escape decoding — anything malformed rejects the whole
 /// line rather than guessing a path.
+#[cfg(any(target_os = "linux", test))]
 fn percent_decode(text: &str) -> Option<Vec<u8>> {
     fn hex(byte: u8) -> Option<u8> {
         match byte {

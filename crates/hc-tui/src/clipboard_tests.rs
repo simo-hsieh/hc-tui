@@ -50,6 +50,7 @@ impl StubDir {
     fn new() -> Self {
         Self(TestDir::new("hc-tui-clipboard-test"))
     }
+    #[cfg(target_os = "linux")]
     fn stub(&self, name: &str, body: &str) {
         let path = self.0.join(name);
         std::fs::write(
@@ -69,6 +70,7 @@ impl StubDir {
         std::fs::write(&path, bytes).unwrap();
         path
     }
+    #[cfg(target_os = "linux")]
     fn env(&self) -> ClipboardEnv {
         let path = format!("{}:/usr/bin:/bin", self.0.display());
         ClipboardEnv {
@@ -83,6 +85,7 @@ impl StubDir {
 /// (observed as a flaky `wsl_powershell_is_tried_first` failure). The
 /// sentinel probe runs the script as a no-op until that transient
 /// clears; production reads get no retry.
+#[cfg(target_os = "linux")]
 fn wait_executable(path: &Path) {
     for _ in 0..200 {
         match std::process::Command::new(path)

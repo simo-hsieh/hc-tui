@@ -202,7 +202,7 @@ fn only_the_managed_and_dev_channels_refuse_an_upgrade() {
     assert!(InstallSource::Nix.refusal().is_some());
     assert!(InstallSource::Cargo.refusal().is_some());
     assert!(InstallSource::DevBuild.refusal().is_some());
-    assert!(!InstallSource::Direct.refusal().is_some());
+    assert!(InstallSource::Direct.refusal().is_none());
 }
 
 #[test]
