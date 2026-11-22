@@ -172,6 +172,17 @@ impl App {
             });
             return;
         }
+        if let Some((_, pane_id)) = hits
+            .agent_tree_toggles
+            .iter()
+            .find(|(rect, _)| contains(*rect, point))
+        {
+            let id = pane_id.clone();
+            if !self.shell_state.collapsed_agents.remove(&id) {
+                self.shell_state.collapsed_agents.insert(id);
+            }
+            return;
+        }
         if let Some((_, endpoint_id, pane_id)) = hits
             .endpoint_agents
             .iter()

@@ -79,6 +79,7 @@ impl App {
             &self.projection.endpoints,
             &self.projection.active_endpoint_id,
             &self.shell,
+            &self.shell_state.collapsed_agents,
         );
         if agents.is_empty() {
             return;

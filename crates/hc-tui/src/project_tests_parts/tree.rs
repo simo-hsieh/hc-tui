@@ -26,10 +26,12 @@ fn family() -> View {
 }
 
 fn order(projection: &Projection, tree: bool) -> Vec<(String, usize)> {
+    let empty = std::collections::HashSet::new();
     endpoints::displayed_agent_rows(
         &projection.endpoints,
         &projection.active_endpoint_id,
         &shell(tree),
+        &empty,
     )
     .into_iter()
     .map(|r| (r.agent.pane_id.clone(), r.depth))
@@ -64,10 +66,12 @@ fn tree_groups_cross_machine_worker_through_shell_without_changing_flat_order_or
 fn tree_render_mouse_targets_and_keyboard_indices_agree_at_narrow_widths() {
     let projected = project(&family(), Some("host-b/t3"));
     let config = shell(true);
+    let empty = std::collections::HashSet::new();
     let targets = endpoints::online_agent_targets(
         &projected.endpoints,
         &projected.active_endpoint_id,
         &config,
+        &empty,
     );
     assert_eq!(
         targets
@@ -89,6 +93,7 @@ fn tree_render_mouse_targets_and_keyboard_indices_agree_at_narrow_widths() {
             &projected.endpoints,
             &projected.active_endpoint_id,
             &config,
+            &empty,
             &mut scroll,
             &mut reveal,
             &mut hits,
@@ -132,10 +137,12 @@ fn stale_parent_stays_visible_but_navigation_skips_it() {
             .collect::<Vec<_>>(),
         ["t1", "host-b/t3", "t4"]
     );
+    let empty = std::collections::HashSet::new();
     let targets = endpoints::online_agent_targets(
         &projected.endpoints,
         &projected.active_endpoint_id,
         &shell(true),
+        &empty,
     );
     assert_eq!(
         targets

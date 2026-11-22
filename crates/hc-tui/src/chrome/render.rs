@@ -78,6 +78,7 @@ pub(crate) struct ShellHitMap {
     pub pane_splits: Vec<crate::app::layout_mouse::SplitHit>,
     pub agents: Vec<(Rect, String)>,
     pub endpoint_agents: Vec<(Rect, ClientEndpointId, String)>,
+    pub agent_tree_toggles: Vec<(Rect, String)>,
     pub agent_body: Rect,
     pub agent_scrollbar: Rect,
     pub agent_scroll_metrics: Option<ScrollMetrics>,
@@ -128,6 +129,7 @@ pub(crate) struct ShellRenderState<'a> {
     pub active_endpoint_id: &'a ClientEndpointId,
     pub collapsed_endpoints: &'a HashSet<ClientEndpointId>,
     pub collapsed_groups: &'a HashSet<String>,
+    pub collapsed_agents: &'a HashSet<String>,
     pub remote_collapsed_groups: &'a HashMap<ClientEndpointId, HashSet<String>>,
     pub workspace_scroll: &'a mut usize,
     pub agent_scroll: &'a mut usize,
@@ -242,6 +244,7 @@ pub(crate) fn render_shell(
         hits.workspaces.clear();
         hits.agents.clear();
         hits.endpoint_agents.clear();
+        hits.agent_tree_toggles.clear();
         hits.tab_scroll_left = Rect::default();
         hits.tab_scroll_right = Rect::default();
         hits.new_tab = Rect::default();

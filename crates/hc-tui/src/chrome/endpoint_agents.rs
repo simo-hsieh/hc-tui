@@ -1,6 +1,6 @@
 // Derived from herdr src/client/shell/endpoint_agents.rs (Apache-2.0).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use ratatui::{
     buffer::Buffer,
@@ -21,7 +21,8 @@ pub(crate) fn render_collapsed(
     config: &super::ClientShellConfig,
     hits: &mut ShellHitMap,
 ) {
-    let rows = agent_rows(endpoints, active_endpoint_id, config);
+    let empty = HashSet::new();
+    let rows = agent_rows(endpoints, active_endpoint_id, config, &empty);
     for (index, row) in rows.into_iter().take(area.height as usize).enumerate() {
         let rect = Rect::new(area.x, area.y + index as u16, area.width, 1);
         if row.agent.focused {
@@ -63,6 +64,7 @@ pub(crate) fn render_expanded(
     endpoints: &[ClientShellEndpoint],
     active_endpoint_id: &ClientEndpointId,
     config: &super::ClientShellConfig,
+    collapsed_agents: &HashSet<String>,
     agent_scroll: &mut usize,
     reveal_focused_agent: &mut bool,
     hits: &mut ShellHitMap,
@@ -70,7 +72,7 @@ pub(crate) fn render_expanded(
     if !super::agents::render_agent_panel_header(buffer, area, agent_view_label, config, hits) {
         return;
     }
-    let rows = agent_rows(endpoints, active_endpoint_id, config);
+    let rows = agent_rows(endpoints, active_endpoint_id, config, collapsed_agents);
     let reveal = std::mem::take(reveal_focused_agent);
     let target = reveal
         .then(|| rows.iter().position(|row| row.agent.focused))
@@ -86,7 +88,7 @@ pub(crate) fn render_expanded(
         target,
         |row| row.agent.rows.len(),
         |buffer, rect, row, hits| {
-            super::agents::render_agent_row(buffer, rect, &row.agent, config);
+            super::agents::render_agent_row(buffer, rect, &row.agent, config, hits);
             if row.stale {
                 buffer.set_style(
                     rect,
@@ -112,6 +114,7 @@ fn agent_rows(
     endpoints: &[ClientShellEndpoint],
     active_endpoint_id: &ClientEndpointId,
     config: &super::ClientShellConfig,
+    collapsed: &HashSet<String>,
 ) -> Vec<EndpointAgentRow> {
     let mut rendered_rows = endpoints
         .iter()
@@ -135,7 +138,7 @@ fn agent_rows(
         .flatten()
         .collect::<HashMap<_, _>>();
 
-    displayed_agent_rows(endpoints, active_endpoint_id, config)
+    displayed_agent_rows(endpoints, active_endpoint_id, config, collapsed)
         .into_iter()
         .filter_map(|row| {
             let key = (row.endpoint.endpoint_id.clone(), row.agent.pane_id.clone());
@@ -144,7 +147,9 @@ fn agent_rows(
             agent.depth = row.depth;
             agent.last_sibling = row.last_sibling;
             agent.has_children = row.has_children;
+            agent.collapsed = row.collapsed;
             agent.guides = row.guides;
+            agent.summary = row.summary;
             if config.agent_tree && row.depth > 0 {
                 super::agent_list::compact_tree_child_row(&mut agent, row.parent_workspace);
             }

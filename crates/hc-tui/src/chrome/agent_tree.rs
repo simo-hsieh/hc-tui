@@ -1,5 +1,15 @@
 //! A display-only forest over the existing, already ranked agent rows.
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
+
+use super::status::AgentStatus;
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct TeamSummary {
+    pub total: usize,
+    pub blocked: usize,
+    pub working: usize,
+    pub done: usize,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct TreeRow {
@@ -8,12 +18,24 @@ pub(crate) struct TreeRow {
     pub last: bool,
     pub parent: Option<usize>,
     pub has_children: bool,
+    pub collapsed: bool,
     pub guides: u8,
+    pub summary: TeamSummary,
 }
 
 const MAX_VISUAL_DEPTH: usize = 3;
 
+#[cfg(test)]
 pub(crate) fn plan(ids: &[&str], parents: &BTreeMap<String, String>) -> Vec<TreeRow> {
+    let statuses = vec![AgentStatus::Idle; ids.len()];
+    plan_with_status(ids, &statuses, parents)
+}
+
+pub(crate) fn plan_with_status(
+    ids: &[&str],
+    statuses: &[AgentStatus],
+    parents: &BTreeMap<String, String>,
+) -> Vec<TreeRow> {
     let positions: BTreeMap<_, _> = ids.iter().enumerate().map(|(i, id)| (*id, i)).collect();
     let mut links: Vec<Option<usize>> = ids
         .iter()
@@ -59,11 +81,21 @@ pub(crate) fn plan(ids: &[&str], parents: &BTreeMap<String, String>) -> Vec<Tree
         children[parent.unwrap_or(ids.len())].push(index);
     }
     let mut ranks: Vec<_> = (0..ids.len()).collect();
+    let mut summaries = vec![TeamSummary::default(); ids.len()];
     let mut remaining: Vec<_> = children[..ids.len()].iter().map(Vec::len).collect();
     let mut leaves: Vec<_> = (0..ids.len()).filter(|&i| remaining[i] == 0).collect();
     while let Some(index) = leaves.pop() {
         if let Some(parent) = links[index] {
             ranks[parent] = ranks[parent].min(ranks[index]);
+            let child_status = statuses.get(index).copied().unwrap_or(AgentStatus::Unknown);
+            let child_summary = summaries[index];
+            summaries[parent].total += 1 + child_summary.total;
+            summaries[parent].blocked +=
+                usize::from(child_status == AgentStatus::Blocked) + child_summary.blocked;
+            summaries[parent].working +=
+                usize::from(child_status == AgentStatus::Working) + child_summary.working;
+            summaries[parent].done +=
+                usize::from(child_status == AgentStatus::Done) + child_summary.done;
             remaining[parent] -= 1;
             if remaining[parent] == 0 {
                 leaves.push(parent);
@@ -79,6 +111,7 @@ pub(crate) fn plan(ids: &[&str], parents: &BTreeMap<String, String>) -> Vec<Tree
                          depth: usize,
                          guides: u8,
                          children: &[Vec<usize>],
+                         summaries: &[TeamSummary],
                          stack: &mut Vec<TreeRow>| {
         for (at, &index) in group.iter().enumerate().rev() {
             stack.push(TreeRow {
@@ -87,11 +120,21 @@ pub(crate) fn plan(ids: &[&str], parents: &BTreeMap<String, String>) -> Vec<Tree
                 last: at + 1 == group.len(),
                 parent,
                 has_children: !children[index].is_empty(),
+                collapsed: false,
                 guides,
+                summary: summaries[index],
             });
         }
     };
-    push_children(&children[ids.len()], None, 0, 0, &children, &mut stack);
+    push_children(
+        &children[ids.len()],
+        None,
+        0,
+        0,
+        &children,
+        &summaries,
+        &mut stack,
+    );
     let mut rows = Vec::with_capacity(ids.len());
     while let Some(row) = stack.pop() {
         let child_guides = if row.depth > 0 && !row.last && row.depth - 1 < 8 {
@@ -105,11 +148,47 @@ pub(crate) fn plan(ids: &[&str], parents: &BTreeMap<String, String>) -> Vec<Tree
             row.depth + 1,
             child_guides,
             &children,
+            &summaries,
             &mut stack,
         );
         rows.push(row);
     }
     rows
+}
+
+pub(crate) fn apply_collapse(
+    rows: Vec<TreeRow>,
+    ids: &[&str],
+    collapsed: &HashSet<String>,
+) -> Vec<TreeRow> {
+    if collapsed.is_empty() {
+        return rows;
+    }
+    let mut visible = Vec::with_capacity(rows.len());
+    let mut hidden_below: Option<usize> = None;
+    for mut row in rows {
+        if let Some(depth) = hidden_below {
+            if row.depth > depth {
+                continue;
+            }
+            hidden_below = None;
+        }
+        if row.has_children && collapsed.contains(ids[row.index]) {
+            row.collapsed = true;
+            hidden_below = Some(row.depth);
+        }
+        visible.push(row);
+    }
+    visible
+}
+
+pub(crate) fn short_blocked_kind(kind: &str) -> String {
+    match kind {
+        "permission" => "perm".to_string(),
+        "question" => "ask".to_string(),
+        "auth" => "auth".to_string(),
+        other => other.chars().take(4).collect(),
+    }
 }
 
 fn visible_depth(depth: usize, width: u16) -> usize {
@@ -319,5 +398,41 @@ mod tests {
             ),
             "    "
         );
+    }
+
+    #[test]
+    fn team_summary_rolls_up_descendants_and_collapse_hides_subtree() {
+        let ids = ["boss", "w1", "sub", "w2", "solo"];
+        let statuses = [
+            AgentStatus::Idle,
+            AgentStatus::Working,
+            AgentStatus::Blocked,
+            AgentStatus::Done,
+            AgentStatus::Idle,
+        ];
+        let parents = [("w1", "boss"), ("sub", "w1"), ("w2", "boss")]
+            .into_iter()
+            .map(|(c, p)| (c.to_string(), p.to_string()))
+            .collect();
+        let planned = plan_with_status(&ids, &statuses, &parents);
+        assert_eq!(
+            planned[0].summary,
+            TeamSummary {
+                total: 3,
+                blocked: 1,
+                working: 1,
+                done: 1,
+            }
+        );
+        let collapsed: HashSet<String> = ["boss".to_string()].into_iter().collect();
+        let visible = apply_collapse(planned, &ids, &collapsed);
+        assert_eq!(
+            visible.iter().map(|r| ids[r.index]).collect::<Vec<_>>(),
+            ["boss", "solo"]
+        );
+        assert!(visible[0].collapsed);
+        assert_eq!(visible[0].summary.blocked, 1);
+        assert_eq!(short_blocked_kind("permission"), "perm");
+        assert_eq!(short_blocked_kind("question"), "ask");
     }
 }

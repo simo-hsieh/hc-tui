@@ -55,7 +55,13 @@ pub(crate) fn mobile_items(
             });
         }
     }
-    let agents = super::endpoints::displayed_agent_rows(endpoints, active_endpoint_id, config);
+    let empty_collapsed = std::collections::HashSet::new();
+    let agents = super::endpoints::displayed_agent_rows(
+        endpoints,
+        active_endpoint_id,
+        config,
+        &empty_collapsed,
+    );
     let agent_view_label = snapshot.agent_view_label.as_deref();
     if !agents.is_empty() || agent_view_label.is_some() {
         let title = agent_view_label

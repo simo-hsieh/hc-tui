@@ -180,6 +180,11 @@ pub(super) fn structured_snapshot_from_spaces(
                             &crate::sidebar::clean(&term.title),
                         ),
                         agent_status: status,
+                        progress: record.and_then(|s| s.progress),
+                        blocked_kind: record
+                            .and_then(|s| s.kind.as_deref())
+                            .map(clean)
+                            .filter(|k| !k.is_empty()),
                         // Presentation supplies a rank from origin clocks;
                         // timestamps and turns are not chronology facts.
                         state_change_seq: 0,

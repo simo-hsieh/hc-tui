@@ -9,6 +9,7 @@ use crate::chrome::snapshot::ClientEndpointId;
 pub(crate) struct ShellState {
     pub collapsed_endpoints: std::collections::HashSet<ClientEndpointId>,
     pub collapsed_groups: std::collections::HashSet<String>,
+    pub collapsed_agents: std::collections::HashSet<String>,
     pub remote_collapsed_groups:
         std::collections::HashMap<ClientEndpointId, std::collections::HashSet<String>>,
     pub workspace_scroll: usize,

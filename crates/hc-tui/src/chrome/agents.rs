@@ -1,7 +1,7 @@
 // Derived from herdr src/client/shell/agent_sidebar.rs (Apache-2.0).
 
 pub(crate) use super::agent_list::{agent_rows, displayed_agent_pane_ids};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use ratatui::{
     buffer::Buffer,
@@ -11,6 +11,7 @@ use ratatui::{
     widgets::{Paragraph, Widget},
 };
 
+use super::agent_tree::TeamSummary;
 use super::render::{ShellHitMap, display_width, put_text};
 use super::snapshot::ClientShellSnapshot;
 use super::spans::resolved_token_spans;
@@ -20,12 +21,16 @@ use super::tokens::{self, ResolvedToken, ResolvedTokenKind};
 pub(crate) struct AgentRow {
     pub pane_id: String,
     pub status: AgentStatus,
+    pub progress: Option<u8>,
+    pub blocked_kind: Option<String>,
     pub focused: bool,
     pub rows: Vec<Vec<ResolvedToken>>,
     pub depth: usize,
     pub last_sibling: bool,
     pub has_children: bool,
+    pub collapsed: bool,
     pub guides: u8,
+    pub summary: TeamSummary,
     pub compact_primary: bool,
 }
 
@@ -61,11 +66,13 @@ pub(crate) fn ordered_agent_pane_ids(
         .collect()
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn render_agent_panel(
     buffer: &mut Buffer,
     area: Rect,
     snapshot: &ClientShellSnapshot,
     config: &super::ClientShellConfig,
+    collapsed_agents: &HashSet<String>,
     agent_scroll: &mut usize,
     reveal_focused_agent: &mut bool,
     hits: &mut ShellHitMap,
@@ -80,7 +87,7 @@ pub(crate) fn render_agent_panel(
         return;
     }
 
-    let rows = agent_rows(snapshot, config, None);
+    let rows = agent_rows(snapshot, config, None, collapsed_agents);
     let target = std::mem::take(reveal_focused_agent)
         .then(|| rows.iter().position(|row| row.focused))
         .flatten();
@@ -99,7 +106,7 @@ pub(crate) fn render_agent_panel(
         |row| row.rows.len(),
         |buffer, rect, row, hits| {
             hits.agents.push((rect, row.pane_id.clone()));
-            render_agent_row(buffer, rect, row, config);
+            render_agent_row(buffer, rect, row, config, hits);
         },
     );
 }
@@ -146,6 +153,18 @@ pub(crate) fn render_agent_panel_header(
         sort_width,
         1,
     );
+    if config.agent_tree && area.x.saturating_add(15) < sort_rect.x {
+        put_text(
+            buffer,
+            area.x.saturating_add(7),
+            area.y + 1,
+            sort_rect.x.saturating_sub(area.x.saturating_add(7)),
+            " · tree",
+            Style::default()
+                .fg(config.palette.accent)
+                .add_modifier(Modifier::BOLD),
+        );
+    }
     hits.agent_sort_toggle = if config.mouse_capture && agent_view_label.is_none() {
         sort_rect
     } else {
@@ -331,12 +350,16 @@ pub(crate) fn agent_row(
     Some(AgentRow {
         pane_id: agent.pane_id.clone(),
         status: agent.agent_status,
+        progress: agent.progress,
+        blocked_kind: agent.blocked_kind.clone(),
         focused: agent.focused,
         rows,
         depth: 0,
         last_sibling: true,
         has_children: false,
+        collapsed: false,
         guides: 0,
+        summary: TeamSummary::default(),
         compact_primary: false,
     })
 }
@@ -346,6 +369,7 @@ pub(crate) fn render_agent_row(
     rect: Rect,
     row: &AgentRow,
     config: &super::ClientShellConfig,
+    hits: &mut ShellHitMap,
 ) {
     let palette = &config.palette;
     let tree_prefix = if config.agent_tree {
@@ -357,7 +381,7 @@ pub(crate) fn render_agent_row(
         super::agent_tree::continuation_prefix(
             row.depth,
             row.last_sibling,
-            row.has_children,
+            row.has_children && !row.collapsed,
             row.guides,
             rect.width,
         )
@@ -384,6 +408,11 @@ pub(crate) fn render_agent_row(
         status_icon(row.status, config.status_indicators),
         Style::default().fg(status_color(row.status, palette)),
     );
+    let badge = if config.agent_tree {
+        super::agent_list::tree_row_badge(row, palette)
+    } else {
+        None
+    };
     let rows = if row.rows.is_empty() {
         vec![vec![ResolvedToken {
             kind: ResolvedTokenKind::StateIcon,
@@ -399,6 +428,11 @@ pub(crate) fn render_agent_row(
             &cont_prefix
         };
         let prefix_cols = 1 + prefix.chars().count();
+        let line_badge = (index == 0)
+            .then_some(badge.as_ref())
+            .flatten()
+            .filter(|b| rect.width.saturating_sub(prefix_cols as u16) >= b.width + 7);
+        let badge_reserve = line_badge.map_or(0, |b| b.width + 2);
         let mut spans = vec![
             ratatui::text::Span::raw(" "),
             ratatui::text::Span::styled(prefix.clone(), secondary),
@@ -416,12 +450,27 @@ pub(crate) fn render_agent_row(
             row_secondary,
             secondary,
             palette,
-            rect.width.saturating_sub(prefix_cols as u16) as usize,
+            rect.width
+                .saturating_sub(prefix_cols as u16 + badge_reserve) as usize,
         ));
-        Paragraph::new(Line::from(spans)).style(row_style).render(
-            Rect::new(rect.x, rect.y + index as u16, rect.width, 1),
-            buffer,
-        );
+        let line_rect = Rect::new(rect.x, rect.y + index as u16, rect.width, 1);
+        Paragraph::new(Line::from(spans))
+            .style(row_style)
+            .render(line_rect, buffer);
+        if let Some(b) = line_badge {
+            let badge_x = line_rect.right().saturating_sub(b.width + 1);
+            let badge_rect = Rect::new(badge_x, line_rect.y, b.width, 1);
+            Paragraph::new(Line::from(b.spans.clone()))
+                .style(row_style)
+                .render(badge_rect, buffer);
+            if b.toggle_width > 0 {
+                let toggle_x = badge_rect.right().saturating_sub(b.toggle_width);
+                hits.agent_tree_toggles.push((
+                    Rect::new(toggle_x, line_rect.y, b.toggle_width + 1, 1),
+                    row.pane_id.clone(),
+                ));
+            }
+        }
     }
 }
 

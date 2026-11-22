@@ -64,7 +64,9 @@ pub(crate) struct AggregateAgentRow<'a> {
     pub depth: usize,
     pub last_sibling: bool,
     pub has_children: bool,
+    pub collapsed: bool,
     pub guides: u8,
+    pub summary: super::agent_tree::TeamSummary,
     pub parent_workspace: Option<&'a str>,
 }
 
@@ -92,7 +94,9 @@ pub(crate) fn aggregate_agent_rows<'a>(
                         depth: 0,
                         last_sibling: true,
                         has_children: false,
+                        collapsed: false,
                         guides: 0,
+                        summary: super::agent_tree::TeamSummary::default(),
                         parent_workspace: None,
                     })
                 })
@@ -116,6 +120,7 @@ pub(crate) fn displayed_agent_rows<'a>(
     endpoints: &'a [ClientShellEndpoint],
     active_endpoint_id: &ClientEndpointId,
     config: &super::ClientShellConfig,
+    collapsed: &HashSet<String>,
 ) -> Vec<AggregateAgentRow<'a>> {
     let mut rows = aggregate_agent_rows(endpoints, active_endpoint_id, config.agent_panel_sort);
     if !config.agent_tree {
@@ -129,6 +134,7 @@ pub(crate) fn displayed_agent_rows<'a>(
             .any(|w| w.workspace_id == row.agent.workspace_id)
     });
     let ids: Vec<_> = rows.iter().map(|row| row.agent.pane_id.as_str()).collect();
+    let statuses: Vec<_> = rows.iter().map(|row| row.agent.agent_status).collect();
     let workspaces: Vec<Option<&str>> = rows
         .iter()
         .map(|row| {
@@ -148,7 +154,8 @@ pub(crate) fn displayed_agent_rows<'a>(
     let Some(parents) = parents else {
         return rows;
     };
-    let plan = super::agent_tree::plan(&ids, parents);
+    let plan = super::agent_tree::plan_with_status(&ids, &statuses, parents);
+    let plan = super::agent_tree::apply_collapse(plan, &ids, collapsed);
     let mut rows: Vec<_> = rows.into_iter().map(Some).collect();
     plan.into_iter()
         .map(|node| {
@@ -156,7 +163,9 @@ pub(crate) fn displayed_agent_rows<'a>(
             row.depth = node.depth;
             row.last_sibling = node.last;
             row.has_children = node.has_children;
+            row.collapsed = node.collapsed;
             row.guides = node.guides;
+            row.summary = node.summary;
             row.parent_workspace = node.parent.and_then(|parent_idx| workspaces[parent_idx]);
             row
         })
@@ -182,8 +191,9 @@ pub(crate) fn online_agent_targets(
     endpoints: &[ClientShellEndpoint],
     active_endpoint_id: &ClientEndpointId,
     config: &super::ClientShellConfig,
+    collapsed: &HashSet<String>,
 ) -> Vec<AggregateAgentTarget> {
-    displayed_agent_rows(endpoints, active_endpoint_id, config)
+    displayed_agent_rows(endpoints, active_endpoint_id, config, collapsed)
         .into_iter()
         .enumerate()
         .filter(|(_, row)| row.endpoint.status == ClientEndpointStatus::Online)

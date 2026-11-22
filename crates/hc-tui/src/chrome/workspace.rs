@@ -135,10 +135,12 @@ pub(crate) fn render_collapsed_sidebar(
         detail_area.width,
         detail_area.height.saturating_sub(1),
     );
-    for (index, pane_id) in super::agents::displayed_agent_pane_ids(snapshot, config)
-        .into_iter()
-        .take(detail_content.height as usize)
-        .enumerate()
+    let empty_collapsed = std::collections::HashSet::new();
+    for (index, pane_id) in
+        super::agents::displayed_agent_pane_ids(snapshot, config, &empty_collapsed)
+            .into_iter()
+            .take(detail_content.height as usize)
+            .enumerate()
     {
         let Some(agent) = snapshot
             .agents

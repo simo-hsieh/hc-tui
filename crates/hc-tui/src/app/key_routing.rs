@@ -322,6 +322,15 @@ impl App {
                 None
             }
             None => {
+                if self.shell.agent_tree
+                    && self.prefix.armed()
+                    && press.input.key == Key::Char('t')
+                    && press.input.mods.is_empty()
+                {
+                    self.prefix.reset();
+                    self.toggle_focused_agent_tree_collapse();
+                    return None;
+                }
                 let target = match self.prefix.feed(&press, &self.live) {
                     Decision::Action(action) => {
                         self.on_action(action, width);

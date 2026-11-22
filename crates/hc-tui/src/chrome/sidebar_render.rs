@@ -266,6 +266,7 @@ pub(crate) fn render_sidebar(
         detail_area,
         snapshot,
         config,
+        state.collapsed_agents,
         state.agent_scroll,
         state.reveal_focused_agent,
         hits,

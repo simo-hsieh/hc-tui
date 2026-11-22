@@ -131,6 +131,8 @@ pub struct ClientShellAgent {
     pub terminal_title: Option<String>,
     pub terminal_title_stripped: Option<String>,
     pub agent_status: AgentStatus,
+    pub progress: Option<u8>,
+    pub blocked_kind: Option<String>,
     pub state_change_seq: u64,
     pub state_labels: Vec<(String, String)>,
     pub tokens: Vec<(String, String)>,

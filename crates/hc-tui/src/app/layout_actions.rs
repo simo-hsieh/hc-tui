@@ -4,6 +4,35 @@ use crate::layout::NavDirection as D;
 use crate::{input::KeybindAction as A, operations::Change};
 
 impl App {
+    pub(super) fn toggle_focused_agent_tree_collapse(&mut self) {
+        let Some(focused) = self.focused.clone() else {
+            return;
+        };
+        let empty = std::collections::HashSet::new();
+        let rows = crate::chrome::endpoints::displayed_agent_rows(
+            &self.projection.endpoints,
+            &self.projection.active_endpoint_id,
+            &self.shell,
+            &empty,
+        );
+        let Some(pos) = rows.iter().position(|r| r.agent.pane_id == focused) else {
+            return;
+        };
+        if rows[pos].has_children {
+            if !self.shell_state.collapsed_agents.remove(&focused) {
+                self.shell_state.collapsed_agents.insert(focused);
+            }
+            return;
+        }
+        // Focused row is a leaf inside a team: collapse its nearest ancestor and focus it.
+        let depth = rows[pos].depth;
+        if let Some(parent_row) = rows[..pos].iter().rev().find(|r| r.depth < depth) {
+            let parent_id = parent_row.agent.pane_id.clone();
+            self.shell_state.collapsed_agents.insert(parent_id.clone());
+            self.focus_pane(parent_id);
+        }
+    }
+
     pub(super) fn layout_action(&mut self, action: A) {
         // With several sidebar endpoints these actions cross machines
         // (the reference's `handle_endpoint_navigation`); the local
@@ -108,7 +137,11 @@ impl App {
                 }
             }
             A::PreviousAgent | A::NextAgent | A::FocusAgent(_) => {
-                let ids = crate::chrome::agents::displayed_agent_pane_ids(snapshot, &self.shell);
+                let ids = crate::chrome::agents::displayed_agent_pane_ids(
+                    snapshot,
+                    &self.shell,
+                    &self.shell_state.collapsed_agents,
+                );
                 if ids.is_empty() {
                     return;
                 }
