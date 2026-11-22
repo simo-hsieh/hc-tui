@@ -55,7 +55,7 @@ async fn the_expanded_machines_header_shows_the_badge() {
     app.sidebar_width = 30;
     let backend = drawn(&mut app, 80, 24);
     let header = header(&backend);
-    assert!(header.contains("machines"), "the label stays: {header:?}");
+    assert!(header.contains("spaces"), "the label stays: {header:?}");
     assert!(
         header.contains(&version()),
         "the running version is missing: {header:?}"

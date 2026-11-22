@@ -52,13 +52,13 @@ pub(crate) fn render_expanded(
         workspace_area.x,
         workspace_area.y,
         workspace_area.width,
-        " machines",
+        " spaces",
         Style::default()
             .fg(palette.overlay0)
             .add_modifier(Modifier::BOLD),
     );
     // The version badge shares the header row, right-aligned a cell
-    // short of the divider column and never touching `machines`.
+    // short of the divider column and never touching `spaces`.
     let badge_row = Rect::new(
         workspace_area.x,
         workspace_area.y,
@@ -68,7 +68,7 @@ pub(crate) fn render_expanded(
     hits.update_badge = put_version_badge(
         buffer,
         badge_row,
-        workspace_area.x.saturating_add(10),
+        workspace_area.x.saturating_add(8),
         state.update_badge,
         palette,
     );
