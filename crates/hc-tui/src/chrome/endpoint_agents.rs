@@ -8,7 +8,7 @@ use ratatui::{
     style::{Modifier, Style},
 };
 
-use super::endpoints::aggregate_agent_rows;
+use super::endpoints::displayed_agent_rows;
 use super::render::{ShellHitMap, put_text};
 use super::snapshot::{ClientEndpointId, ClientShellEndpoint};
 use super::status::{status_color, status_icon};
@@ -135,12 +135,14 @@ fn agent_rows(
         .flatten()
         .collect::<HashMap<_, _>>();
 
-    aggregate_agent_rows(endpoints, active_endpoint_id, config.agent_panel_sort)
+    displayed_agent_rows(endpoints, active_endpoint_id, config)
         .into_iter()
         .filter_map(|row| {
             let key = (row.endpoint.endpoint_id.clone(), row.agent.pane_id.clone());
             let mut agent = rendered_rows.remove(&key)?;
             agent.focused &= row.endpoint.endpoint_id == active_endpoint_id;
+            agent.depth = row.depth;
+            agent.last_sibling = row.last_sibling;
             Some(EndpointAgentRow {
                 endpoint_id: row.endpoint.endpoint_id.clone(),
                 machine_label: row.endpoint.label.to_owned(),

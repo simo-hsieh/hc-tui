@@ -1,4 +1,5 @@
 //! Read-only application tests and shared fixtures.
+mod agent_tree;
 mod cases_1;
 mod cases_2;
 mod endpoint_nav;

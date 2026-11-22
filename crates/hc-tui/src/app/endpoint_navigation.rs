@@ -78,7 +78,7 @@ impl App {
         let agents = crate::chrome::endpoints::online_agent_targets(
             &self.projection.endpoints,
             &self.projection.active_endpoint_id,
-            self.shell.agent_panel_sort,
+            &self.shell,
         );
         if agents.is_empty() {
             return;

@@ -2,6 +2,8 @@
 //! the snapshot model is neutral so `watch::View` data projects onto herdr's
 //! presentation without inventing hc-tui-specific output.
 
+mod agent_list;
+pub(crate) mod agent_tree;
 pub mod agents;
 pub(crate) mod config_diagnostic;
 pub(crate) mod copy_feedback;
@@ -69,6 +71,8 @@ pub struct ClientShellConfig {
     pub spaces: SpacesSidebarConfig,
     pub agents: AgentsSidebarConfig,
     pub agent_panel_sort: AgentPanelSortConfig,
+    /// Session-only CLI choice; never loaded from the shared Herdr config.
+    pub agent_tree: bool,
     pub status_indicators: StatusIndicatorStyle,
     pub theme_name: String,
     pub theme_runtime: ThemeRuntimeConfig,
@@ -157,6 +161,7 @@ impl ClientShellConfig {
             spaces: ui.sidebar.spaces.clone(),
             agents: ui.sidebar.agents.clone(),
             agent_panel_sort: ui.agent_panel_sort,
+            agent_tree: false,
             status_indicators: ui.status_indicators,
             theme_name,
             theme_runtime,

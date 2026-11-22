@@ -48,11 +48,17 @@ macOS (arm64 and Intel). To pin a version, skip the core install, upgrade or uni
 ```sh
 hc-tui                                  # the default session
 hc-tui --session work
+hc-tui --agent-tree                      # group agent workers by parent
 hc-tui --remote host-a --session work   # over SSH
 ```
 
 hc-tui starts the `hc` core itself when nothing answers on the session socket. `Ctrl+B q` detaches and leaves the
 core and your terminals running; run `hc-tui` again to reattach.
+
+`--agent-tree` groups reporting agents by core parent links, including workers on other machines.
+The tree is always expanded. It changes only the Agents list, not workspace placement, status or process lifetimes.
+A blocked worker brings its family toward the top under priority sorting. Shell parents do not get synthetic agent
+rows. Omit the option for the original flat list. No shared config file or keybinding changes are needed.
 
 The prefix is `Ctrl+B`, as in Herdr:
 

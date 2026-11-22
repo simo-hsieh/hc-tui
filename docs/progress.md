@@ -1,5 +1,15 @@
 # Milestone progress
 
+## Optional worker tree (2026-11-22)
+
+- Added session-only `--agent-tree`, off by default. Existing reporting agent rows form a parent-derived forest across machines, including chains through non-agent shells. No labels, status, placement or process lifetimes change.
+- Rendering, keyboard navigation, indexed focus, mobile and collapsed Agents lists use the same tree policy. Workspace rows stay flat. Cycles terminate deterministically and deep traversal is iterative.
+- Added planner, projection/cache, local navigation, narrow render, reload, real-binary fake-core PTY and opt-in official-core PTY checks. The workspace suite passed 1,311 tests, with 26 opt-in/platform tests ignored. All-target Clippy passed with warnings denied.
+- Claude and Neon reviewed the implementation and tests. Their collapsed-agent numbering, config-reload and fixture-isolation findings are fixed.
+- A targeted tree PTY check passed against source-built official core 0.1.21. The broader existing `real_core_smoke` still reproduces the documented macOS detach hang after tab/split operations, both on the candidate and the previously installed 0.1.13 baseline. It is not counted as passing.
+- The Linux-only pinned-reference parity harness and real SSH checks were not run on this macOS host. Cross-machine tree behavior is covered by protocol fixtures, not a live SSH claim.
+- Build prerequisites include a port of official core's static-library-only macOS build flag and narrow macOS lint fixes. See [intent](agent-tree/intent.md) and [design](agent-tree/design.md).
+
 ## M0: Bootstrap (2026-11-04)
 
 - Implemented in `45cc5eb`; supervisor review and the private-data scan passed.

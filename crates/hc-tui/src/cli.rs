@@ -30,6 +30,8 @@ pub struct Options {
     pub session: Option<OsString>,
     /// SSH target (`--remote`); a local endpoint when `None`.
     pub remote: Option<String>,
+    /// Group agent rows by core parent links for this viewer only.
+    pub agent_tree: bool,
 }
 
 /// Parses `args` (the program's argv tail). Errors are user-facing.
@@ -37,6 +39,7 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Action, String> {
     let mut options = Options {
         session: None,
         remote: None,
+        agent_tree: false,
     };
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
@@ -44,6 +47,7 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Action, String> {
             "-h" | "--help" => return Ok(Action::Help),
             "-V" | "--version" => return Ok(Action::Version),
             "--upgrade" => return Ok(Action::Upgrade),
+            "--agent-tree" => options.agent_tree = true,
             "--session" => {
                 let Some(value) = args.next() else {
                     return Err("--session needs a value".into());
@@ -151,6 +155,7 @@ Options:
       --remote <TARGET>  Connect over SSH: `ssh TARGET hc connect`; one
                          shared login and one attach connection per
                          target (login kept 10 minutes)
+      --agent-tree       Group agents by parent terminal (off by default)
   -h, --help             Print this help
   -V, --version          Print the version
       --upgrade          Run the official installer into this binary's
@@ -214,17 +219,22 @@ fn shared_attach(endpoint: &Endpoint, ssh: &Option<OsString>) -> hc_proto::clien
 /// Builds the app over the endpoint's real connections and runs it
 /// until detach. Errors are user-facing strings — a failure leaves the
 /// terminal restored by the caller's guard.
-pub async fn run(endpoint: &Endpoint, env: &Env) -> Result<Option<PathBuf>, String> {
+pub async fn run(
+    endpoint: &Endpoint,
+    env: &Env,
+    agent_tree: bool,
+) -> Result<Option<PathBuf>, String> {
     // The user's herdr config drives prefix + keybindings, read-only.
     let config_path = crate::config::config_path();
     let loaded = crate::config::load(&config_path);
     let live = loaded.config.live_keybinds();
-    let shell = crate::chrome::ClientShellConfig::from_config(
+    let mut shell = crate::chrome::ClientShellConfig::from_config(
         &loaded.config,
         None,
         crate::config::config_diagnostic_summary(&loaded.diagnostics),
         config_path,
     );
+    shell.agent_tree = agent_tree;
     // Chrome preferences key on the endpoint's own identity — the
     // local core's socket, or a remote's target + session — so two
     // endpoints never share a file.
@@ -366,7 +376,7 @@ pub async fn run_options(
         platform,
     )
     .map_err(|e| format!("endpoint: {e}"))?;
-    run(&endpoint, env).await
+    run(&endpoint, env, options.agent_tree).await
 }
 
 #[cfg(test)]

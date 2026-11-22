@@ -61,6 +61,8 @@ pub(crate) struct AggregateAgentRow<'a> {
     pub endpoint: CachedEndpointSnapshot<'a>,
     pub agent: &'a super::snapshot::ClientShellAgent,
     pub recency: u64,
+    pub depth: usize,
+    pub last_sibling: bool,
 }
 
 /// Endpoint-ordered agent rows. `agent_view` filtering is not part of hc-tui's
@@ -84,6 +86,8 @@ pub(crate) fn aggregate_agent_rows<'a>(
                         recency: endpoint.agent_recency.get(&pane_id).copied().unwrap_or(0),
                         endpoint,
                         agent,
+                        depth: 0,
+                        last_sibling: true,
                     })
                 })
         })
@@ -99,6 +103,44 @@ pub(crate) fn aggregate_agent_rows<'a>(
     }
     let _ = active_endpoint_id;
     rows
+}
+
+/// The Agents view's final order, shared by renderers and navigation.
+pub(crate) fn displayed_agent_rows<'a>(
+    endpoints: &'a [ClientShellEndpoint],
+    active_endpoint_id: &ClientEndpointId,
+    config: &super::ClientShellConfig,
+) -> Vec<AggregateAgentRow<'a>> {
+    let mut rows = aggregate_agent_rows(endpoints, active_endpoint_id, config.agent_panel_sort);
+    if !config.agent_tree {
+        return rows;
+    }
+    rows.retain(|row| {
+        row.endpoint
+            .snapshot
+            .workspaces
+            .iter()
+            .any(|w| w.workspace_id == row.agent.workspace_id)
+    });
+    let ids: Vec<_> = rows.iter().map(|row| row.agent.pane_id.as_str()).collect();
+    // Projection gives every endpoint the same full-inventory relationship Arc.
+    let parents = endpoints
+        .iter()
+        .find_map(|e| e.snapshot.as_ref())
+        .map(|s| s.terminal_parents.as_ref());
+    let Some(parents) = parents else {
+        return rows;
+    };
+    let plan = super::agent_tree::plan(&ids, parents);
+    let mut rows: Vec<_> = rows.into_iter().map(Some).collect();
+    plan.into_iter()
+        .map(|node| {
+            let mut row = rows[node.index].take().expect("tree emits each row once");
+            row.depth = node.depth;
+            row.last_sibling = node.last;
+            row
+        })
+        .collect()
 }
 
 /// One row of `aggregate_agent_rows` usable as a navigation target:
@@ -119,9 +161,9 @@ pub(crate) struct AggregateAgentTarget {
 pub(crate) fn online_agent_targets(
     endpoints: &[ClientShellEndpoint],
     active_endpoint_id: &ClientEndpointId,
-    sort: crate::config::AgentPanelSortConfig,
+    config: &super::ClientShellConfig,
 ) -> Vec<AggregateAgentTarget> {
-    aggregate_agent_rows(endpoints, active_endpoint_id, sort)
+    displayed_agent_rows(endpoints, active_endpoint_id, config)
         .into_iter()
         .enumerate()
         .filter(|(_, row)| row.endpoint.status == ClientEndpointStatus::Online)

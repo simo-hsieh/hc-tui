@@ -314,6 +314,12 @@ pub(super) fn structured_snapshot_from_spaces(
             tab_bar_right: Vec::new(),
             tab_bar_right_separator: String::new(),
             agent_order,
+            terminal_parents: std::sync::Arc::new(
+                terms
+                    .iter()
+                    .filter_map(|t| t.parent.as_ref().map(|p| (t.address.clone(), p.clone())))
+                    .collect(),
+            ),
             agent_view_label: None,
             workspaces,
             tabs,

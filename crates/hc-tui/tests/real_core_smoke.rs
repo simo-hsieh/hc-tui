@@ -57,6 +57,7 @@ fn tui_env(scratch: &ScratchCore) -> Vec<(String, String)> {
         ("PATH".into(), "/usr/bin:/bin".into()),
         ("LANG".into(), "C.UTF-8".into()),
         ("TERM".into(), "xterm-256color".into()),
+        ("HC_TUI_NO_UPDATE_CHECK".into(), "1".into()),
         ("HOME".into(), root("home")),
         ("XDG_STATE_HOME".into(), root("state")),
         ("XDG_CONFIG_HOME".into(), root("config")),
@@ -122,7 +123,8 @@ fn spawn_tui(scratch: &ScratchCore) -> Tui {
     }
     let sfd = slave.as_raw_fd();
     let dup = || unsafe { Stdio::from_raw_fd(libc::dup(sfd)) };
-    let mut command = Command::new(tui_bin());
+    let bin = std::env::var_os("HC_TUI_TEST_BINARY").unwrap_or_else(|| tui_bin().into());
+    let mut command = Command::new(&bin);
     command
         .env_clear()
         .envs(tui_env(scratch))
@@ -444,7 +446,8 @@ async fn real_core_smoke() {
             None => {
                 assert!(
                     Instant::now() < deadline,
-                    "hc-tui did not exit after detach"
+                    "hc-tui did not exit after detach; screen:\n{}",
+                    screen(&vt)
                 );
                 tokio::time::sleep(POLL).await;
             }

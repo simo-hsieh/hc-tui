@@ -23,6 +23,8 @@ pub struct ClientShellSnapshot {
     pub tab_bar_right: Vec<ClientShellTabStatusSegment>,
     pub tab_bar_right_separator: String,
     pub agent_order: Vec<String>,
+    /// Full inventory relationships, including terminals without agent rows.
+    pub terminal_parents: std::sync::Arc<std::collections::BTreeMap<String, String>>,
     /// Active saved agent-view label; `None` in hc-tui's M2 projection.
     pub agent_view_label: Option<String>,
     pub workspaces: Vec<ClientShellWorkspace>,

@@ -55,11 +55,7 @@ pub(crate) fn mobile_items(
             });
         }
     }
-    let agents = super::endpoints::aggregate_agent_rows(
-        endpoints,
-        active_endpoint_id,
-        config.agent_panel_sort,
-    );
+    let agents = super::endpoints::displayed_agent_rows(endpoints, active_endpoint_id, config);
     let agent_view_label = snapshot.agent_view_label.as_deref();
     if !agents.is_empty() || agent_view_label.is_some() {
         let title = agent_view_label
@@ -80,6 +76,7 @@ pub(crate) fn mobile_items(
             });
         }
         for row in agents {
+            let tree_prefix = super::agent_tree::prefix(row.depth, row.last_sibling, content_width);
             let endpoint = row.endpoint;
             let agent = row.agent;
             let workspace = endpoint
@@ -148,7 +145,7 @@ pub(crate) fn mobile_items(
             items.push(MobileItem {
                 lines: vec![
                     Line::from(vec![
-                        Span::styled("  ", Style::default().bg(background)),
+                        Span::styled(format!("  {tree_prefix}"), Style::default().bg(background)),
                         Span::styled(
                             status_icon(agent.agent_status, config.status_indicators),
                             Style::default()
@@ -164,7 +161,10 @@ pub(crate) fn mobile_items(
                         Span::styled(
                             truncate_end(
                                 &format!("{} · {primary}", endpoint.label),
-                                usize::from(content_width.saturating_sub(5)),
+                                usize::from(
+                                    content_width
+                                        .saturating_sub(5 + tree_prefix.chars().count() as u16),
+                                ),
                             ),
                             Style::default()
                                 .fg(foreground)

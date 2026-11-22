@@ -79,6 +79,7 @@ Unofficial. Not affiliated with or endorsed by the Herdr project.
   them in the right place.
 
 ### R4 Sidebar
+- **Opt-in worker tree:** `--agent-tree` is an explicit exception to flat Agents-view parity. It groups existing agent rows by core parent links with bounded connectors. Spaces remain unchanged, and omitting the option preserves the reference presentation. See [the worker-tree design](agent-tree/design.md).
 - Presentation and interaction follow the pinned herdr sidebar exactly, including configured
   width, sections, ordering, glyphs/colors, truncation and highlight rules.
 - **Spaces view:** spaces grouped by machine, using the reference's aggregate status,

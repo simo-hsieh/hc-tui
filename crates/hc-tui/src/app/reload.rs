@@ -34,6 +34,7 @@ impl App {
         }
         // Reload does not reset startup preferences or a user's current collapse state.
         next.sidebar_start_collapsed = previous.sidebar_start_collapsed;
+        next.agent_tree = previous.agent_tree;
         // The endpoint's preferences file and its loaded choices carry
         // over: `from_config` starts them empty.
         next.preferences = previous.preferences.clone();

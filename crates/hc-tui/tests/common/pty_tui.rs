@@ -111,8 +111,10 @@ pub fn spawn_tui(env: &[(String, String)], args: &[String], cwd: &Path) -> Tui {
     }
     let sfd = slave.as_raw_fd();
     let dup = || unsafe { Stdio::from_raw_fd(libc::dup(sfd)) };
-    let bin = env!("CARGO_BIN_EXE_hc-tui");
-    let mut command = Command::new(bin);
+    // Explicit opt-in lets the same scratch checks verify an installed build.
+    let bin = std::env::var_os("HC_TUI_TEST_BINARY")
+        .unwrap_or_else(|| env!("CARGO_BIN_EXE_hc-tui").into());
+    let mut command = Command::new(&bin);
     command
         .args(args)
         .env_clear()
@@ -133,7 +135,7 @@ pub fn spawn_tui(env: &[(String, String)], args: &[String], cwd: &Path) -> Tui {
     }
     let child = command
         .spawn()
-        .unwrap_or_else(|e| panic!("cannot spawn {bin}: {e}"));
+        .unwrap_or_else(|e| panic!("cannot spawn {bin:?}: {e}"));
     Tui {
         master,
         slave,

@@ -40,5 +40,8 @@ mod cases_1;
 #[path = "project_tests_parts/cases_2.rs"]
 mod cases_2;
 
+#[path = "project_tests_parts/tree.rs"]
+mod tree;
+
 #[path = "project_traversal_tests.rs"]
 mod traversal_tests;

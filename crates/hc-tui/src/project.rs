@@ -245,6 +245,15 @@ pub(crate) fn project_with(
     // a dead rpc lane dims remote rows while their terminals stay live.
     let rpc_offline = matches!(view.rpc, Link::Offline { .. } | Link::Stopped);
 
+    // Keep ancestry outside the endpoint cache: hidden and remote intermediates
+    // can change even when an endpoint's visible terminal list is unchanged.
+    let terminal_parents = std::sync::Arc::new(
+        view.inventory
+            .terminals()
+            .values()
+            .filter_map(|t| t.parent.as_ref().map(|p| (t.address.clone(), p.clone())))
+            .collect::<BTreeMap<_, _>>(),
+    );
     let mut by_machine: BTreeMap<String, Vec<&Terminal>> = BTreeMap::new();
     for term in view.inventory.terminals().values() {
         if own.closed.get(&term.address) == Some(&term.created_ms) {
@@ -279,7 +288,8 @@ pub(crate) fn project_with(
     let local_terms = by_machine.remove("").unwrap_or_default();
     // A remote selection can never match a local bare `tN`, so focus ids
     // land only where the selected terminal actually lives.
-    let (local_snapshot, mut layouts) = build(None, &local_terms, selected);
+    let (mut local_snapshot, mut layouts) = build(None, &local_terms, selected);
+    local_snapshot.terminal_parents = terminal_parents.clone();
     let active_snapshot = local_snapshot.clone();
     let local_recency = recency_of(&local_snapshot);
     endpoints.push(ClientShellEndpoint {
@@ -320,7 +330,8 @@ pub(crate) fn project_with(
             remote_status(state)
         };
         let selected_here = selected.filter(|address| terms.iter().any(|t| t.address == *address));
-        let (snapshot, remote_layouts) = build(Some(&name), &terms, selected_here);
+        let (mut snapshot, remote_layouts) = build(Some(&name), &terms, selected_here);
+        snapshot.terminal_parents = terminal_parents.clone();
         if selected_machine.as_deref() == Some(&name) {
             layouts = remote_layouts;
         }

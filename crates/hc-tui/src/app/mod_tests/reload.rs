@@ -32,6 +32,20 @@ fn rendered(app: &mut App, width: u16) -> String {
 }
 
 #[tokio::test]
+async fn reload_keeps_cli_agent_tree_without_shared_config_writes() {
+    let mut app = app();
+    app.shell.agent_tree = true;
+    let text = "[keys]\nprefix='ctrl+f'\n";
+    let _root = config(&mut app, text);
+    app.on_action(crate::input::KeybindAction::ReloadConfig, 120);
+    assert!(app.shell.agent_tree);
+    assert_eq!(
+        std::fs::read_to_string(&app.shell.local_config_path).unwrap(),
+        text
+    );
+}
+
+#[tokio::test]
 async fn reload_applies_binding_theme_geometry_without_writing_the_file() {
     let mut app = app();
     let text = "[keys]\nprefix='ctrl+a'\nhelp='prefix+shift+k'\n[theme]\nname='nord'\n[ui]\nsidebar_width=32\n";

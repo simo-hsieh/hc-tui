@@ -1,5 +1,6 @@
 // Derived from herdr src/client/shell/agent_sidebar.rs (Apache-2.0).
 
+pub(crate) use super::agent_list::{agent_rows, displayed_agent_pane_ids};
 use std::collections::HashMap;
 
 use ratatui::{
@@ -21,6 +22,8 @@ pub(crate) struct AgentRow {
     pub status: AgentStatus,
     pub focused: bool,
     pub rows: Vec<Vec<ResolvedToken>>,
+    pub depth: usize,
+    pub last_sibling: bool,
 }
 
 pub(crate) fn ordered_agent_pane_ids(
@@ -257,17 +260,6 @@ pub(crate) fn render_agent_list<T>(
     }
 }
 
-pub(crate) fn agent_rows(
-    snapshot: &ClientShellSnapshot,
-    config: &super::ClientShellConfig,
-    machine: Option<&str>,
-) -> Vec<AgentRow> {
-    ordered_agent_pane_ids(snapshot, config.agent_panel_sort)
-        .into_iter()
-        .filter_map(|pane_id| agent_row(snapshot, &pane_id, config, machine))
-        .collect()
-}
-
 pub(crate) fn agent_row(
     snapshot: &ClientShellSnapshot,
     pane_id: &str,
@@ -338,6 +330,8 @@ pub(crate) fn agent_row(
         status: agent.agent_status,
         focused: agent.focused,
         rows,
+        depth: 0,
+        last_sibling: true,
     })
 }
 
@@ -348,6 +342,7 @@ pub(crate) fn render_agent_row(
     config: &super::ClientShellConfig,
 ) {
     let palette = &config.palette;
+    let tree_prefix = super::agent_tree::prefix(row.depth, row.last_sibling, rect.width);
     let row_style = if row.focused {
         Style::default().bg(palette.active_row_bg)
     } else {
@@ -378,7 +373,15 @@ pub(crate) fn render_agent_row(
     };
     for (index, tokens) in rows.iter().take(rect.height as usize).enumerate() {
         let indent = if index == 0 { 1 } else { 3 };
-        let mut spans = vec![ratatui::text::Span::raw(" ".repeat(indent))];
+        let prefix = if index == 0 {
+            tree_prefix.clone()
+        } else {
+            " ".repeat(tree_prefix.chars().count())
+        };
+        let mut spans = vec![ratatui::text::Span::raw(format!(
+            "{}{prefix}",
+            " ".repeat(indent)
+        ))];
         spans.extend(resolved_token_spans(
             tokens,
             icon,
@@ -387,7 +390,8 @@ pub(crate) fn render_agent_row(
             secondary,
             secondary,
             palette,
-            rect.width.saturating_sub(indent as u16) as usize,
+            rect.width
+                .saturating_sub((indent + tree_prefix.chars().count()) as u16) as usize,
         ));
         Paragraph::new(Line::from(spans)).style(row_style).render(
             Rect::new(rect.x, rect.y + index as u16, rect.width, 1),

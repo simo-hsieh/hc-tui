@@ -108,10 +108,7 @@ impl App {
                 }
             }
             A::PreviousAgent | A::NextAgent | A::FocusAgent(_) => {
-                let ids = crate::chrome::agents::ordered_agent_pane_ids(
-                    snapshot,
-                    self.shell.agent_panel_sort,
-                );
+                let ids = crate::chrome::agents::displayed_agent_pane_ids(snapshot, &self.shell);
                 if ids.is_empty() {
                     return;
                 }

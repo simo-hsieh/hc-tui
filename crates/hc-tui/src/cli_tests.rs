@@ -5,6 +5,25 @@ use crate::test_support::TestDir;
 use hc_proto::endpoint::{Local, Remote};
 use std::path::PathBuf;
 
+#[test]
+fn agent_tree_is_session_only_and_off_by_default() {
+    let Action::Run(default) = parse(Vec::<String>::new()).unwrap() else {
+        panic!("run");
+    };
+    assert!(!default.agent_tree);
+    let Action::Run(tree) =
+        parse(["--agent-tree".into(), "--session".into(), "scratch".into()]).unwrap()
+    else {
+        panic!("run");
+    };
+    assert!(tree.agent_tree);
+    assert_eq!(
+        tree.session.as_deref(),
+        Some(std::ffi::OsStr::new("scratch"))
+    );
+    assert!(help_text().contains("--agent-tree"));
+}
+
 fn env_with(pairs: &[(&str, &str)]) -> Env {
     pairs
         .iter()
