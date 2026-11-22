@@ -30,6 +30,11 @@ fn main() {
         "-Doptimize=ReleaseFast",
         "-Dcpu=baseline",
     ]);
+    // Only the static archive is linked; xcframework packaging requires a
+    // working full Xcode installation and is not needed by this client.
+    if target.contains("apple") {
+        build.arg("-Demit-xcframework=false");
+    }
     // Cross-compiling (the static musl Linux build): Zig must target it too.
     if target != host {
         build.arg(format!("-Dtarget={}", zig_target(&target)));
