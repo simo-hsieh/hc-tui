@@ -190,11 +190,19 @@ pub fn read(terms: &[&Terminal], document: &Value, machine: Option<&str>) -> Vec
     for terminal in rest {
         let (key, label) = crate::project::space_of(terminal);
         let at = *positions.entry(key.clone()).or_insert_with(|| {
+            let has_named_space = terminal
+                .labels
+                .get("herdr.space.name")
+                .is_some_and(|n| !n.is_empty())
+                || terminal
+                    .labels
+                    .get("herdr.space")
+                    .is_some_and(|s| !crate::project::is_opaque_id(s));
             spaces.push(Space {
                 from_app: false,
                 id: key.clone(),
                 name: label,
-                custom_name: terminal.labels.contains_key("herdr.space"),
+                custom_name: has_named_space,
                 folder: crate::project::repository::folder(terminal).to_owned(),
                 tabs: Vec::new(),
             });
@@ -216,9 +224,7 @@ pub fn read(terms: &[&Terminal], document: &Value, machine: Option<&str>) -> Vec
             let name = terminal
                 .labels
                 .get("herdr.tab")
-                .filter(|label| {
-                    !(label.len() == 32 && label.bytes().all(|b| b.is_ascii_hexdigit()))
-                })
+                .filter(|label| !crate::project::is_opaque_id(label))
                 .map(String::as_str);
             let name = terminal
                 .labels

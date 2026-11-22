@@ -150,8 +150,12 @@ fn agent_rows(
             agent.collapsed = row.collapsed;
             agent.guides = row.guides;
             agent.summary = row.summary;
-            if config.agent_tree && row.depth > 0 {
-                super::agent_list::compact_tree_child_row(&mut agent, row.parent_workspace);
+            if config.agent_tree {
+                if row.depth > 0 {
+                    super::agent_list::compact_tree_child_row(&mut agent, row.parent_workspace);
+                } else {
+                    super::agent_list::dedupe_agent_second_line(&mut agent);
+                }
             }
             Some(EndpointAgentRow {
                 endpoint_id: row.endpoint.endpoint_id.clone(),

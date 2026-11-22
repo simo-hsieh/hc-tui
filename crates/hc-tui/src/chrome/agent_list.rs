@@ -38,6 +38,21 @@ pub(crate) fn row_workspace_label(row: &AgentRow) -> Option<String> {
         })
 }
 
+pub(crate) fn dedupe_agent_second_line(row: &mut AgentRow) {
+    if row.rows.len() == 2
+        && let [only] = row.rows[1].as_slice()
+        && let ResolvedTokenKind::Agent(agent_name) = &only.kind
+        && row.rows[0].iter().any(|token| {
+            matches!(
+                &token.kind,
+                ResolvedTokenKind::Tab(label) | ResolvedTokenKind::Pane(label) if label == agent_name
+            )
+        })
+    {
+        row.rows.pop();
+    }
+}
+
 pub(crate) fn compact_tree_child_row(row: &mut AgentRow, parent_workspace: Option<&str>) {
     let Some(first) = row.rows.first_mut() else {
         return;
@@ -60,18 +75,7 @@ pub(crate) fn compact_tree_child_row(row: &mut AgentRow, parent_workspace: Optio
         first.retain(|token| !matches!(&token.kind, ResolvedTokenKind::Workspace(_)));
         row.compact_primary = true;
     }
-    if row.rows.len() == 2
-        && let [only] = row.rows[1].as_slice()
-        && let ResolvedTokenKind::Agent(agent_name) = &only.kind
-        && row.rows[0].iter().any(|token| {
-            matches!(
-                &token.kind,
-                ResolvedTokenKind::Tab(label) | ResolvedTokenKind::Pane(label) if label == agent_name
-            )
-        })
-    {
-        row.rows.pop();
-    }
+    dedupe_agent_second_line(row);
 }
 
 pub(crate) struct RowBadge {
@@ -185,6 +189,8 @@ pub(crate) fn agent_rows(
             row.summary = node.summary;
             if let Some(parent_idx) = node.parent {
                 compact_tree_child_row(&mut row, workspaces[parent_idx].as_deref());
+            } else {
+                dedupe_agent_second_line(&mut row);
             }
             row
         })

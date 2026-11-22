@@ -137,15 +137,33 @@ fn agent_record(term: &Terminal) -> Option<AgentRecord<'_>> {
 /// The space a terminal belongs to: `herdr.space`, else its cwd. The key
 /// keeps the full cwd so basenames colliding stay distinct; the label is
 /// what the workspace row displays.
-pub(crate) fn space_of(term: &Terminal) -> (String, String) {
-    if let Some(space) = term.labels.get("herdr.space") {
-        // Length-prefixed raw key: `space:a/tab:b` + tab `c` can never
-        // collide with space `a` + tab `b/tab:c`.
-        return (format!("space:{}:{}", space.len(), space), clean(space));
+/// True when a grouping label looks like a machine-generated identity
+/// (32-char hex `opaque_id`, 36-char UUID, or 6+ digit numeric ID) rather
+/// than a human-chosen name.
+pub(crate) fn is_opaque_id(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    if bytes.len() == 32 && bytes.iter().all(|b| b.is_ascii_hexdigit()) {
+        return true;
     }
-    if let Some(identity) = repository::space_identity(term) {
-        return identity;
+    if bytes.len() >= 6 && bytes.iter().all(|b| b.is_ascii_digit()) {
+        return true;
     }
+    if bytes.len() == 36
+        && bytes[8] == b'-'
+        && bytes[13] == b'-'
+        && bytes[18] == b'-'
+        && bytes[23] == b'-'
+        && bytes
+            .iter()
+            .enumerate()
+            .all(|(i, b)| matches!(i, 8 | 13 | 18 | 23) || b.is_ascii_hexdigit())
+    {
+        return true;
+    }
+    false
+}
+
+fn folder_basename(term: &Terminal) -> String {
     let cwd = repository::folder(term);
     let base = cwd
         .trim_end_matches('/')
@@ -153,7 +171,29 @@ pub(crate) fn space_of(term: &Terminal) -> (String, String) {
         .next()
         .filter(|b| !b.is_empty())
         .unwrap_or(cwd);
-    (format!("cwd:{}:{}", cwd.len(), cwd), clean(base))
+    clean(base)
+}
+
+pub(crate) fn space_of(term: &Terminal) -> (String, String) {
+    if let Some(space) = term.labels.get("herdr.space") {
+        // Length-prefixed raw key: `space:a/tab:b` + tab `c` can never
+        // collide with space `a` + tab `b/tab:c`.
+        let key = format!("space:{}:{}", space.len(), space);
+        let label = term
+            .labels
+            .get("herdr.space.name")
+            .map(|name| clean(name))
+            .filter(|name| !name.is_empty())
+            .or_else(|| (!is_opaque_id(space)).then(|| clean(space)))
+            .or_else(|| repository::space_identity(term).map(|(_, label)| label))
+            .unwrap_or_else(|| folder_basename(term));
+        return (key, label);
+    }
+    if let Some(identity) = repository::space_identity(term) {
+        return identity;
+    }
+    let cwd = repository::folder(term);
+    (format!("cwd:{}:{}", cwd.len(), cwd), folder_basename(term))
 }
 
 #[path = "project_repository.rs"]

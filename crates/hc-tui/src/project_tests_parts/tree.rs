@@ -166,3 +166,30 @@ fn relationship_changes_rebuild_tree_even_when_remote_agent_rows_are_cached() {
     let second = cache.project(&view, Some("host-b/t3"));
     assert_eq!(order(&second, true), order(&second, false));
 }
+
+#[test]
+fn opaque_herdr_space_ids_fall_back_to_folder_name_while_preserving_grouping() {
+    let mut a = term("t1");
+    a.cwd = "/home/user/acme-shop".into();
+    a.labels.insert(
+        "herdr.space".into(),
+        "0123456789abcdef0123456789abcdef".into(),
+    );
+    let mut b = term("t2");
+    b.cwd = "/home/user/billing-api".into();
+    b.labels.insert("herdr.space".into(), "1763829104".into());
+    let mut c = term("t3");
+    c.cwd = "/home/user/docs-site".into();
+    c.labels.insert(
+        "herdr.space".into(),
+        "550e8400-e29b-41d4-a716-446655440000".into(),
+    );
+    let projected = project(&view(vec![a, b, c], vec![]), Some("t1"));
+    let labels: Vec<&str> = projected
+        .snapshot
+        .workspaces
+        .iter()
+        .map(|w| w.label.as_str())
+        .collect();
+    assert_eq!(labels, ["acme-shop", "billing-api", "docs-site"]);
+}
