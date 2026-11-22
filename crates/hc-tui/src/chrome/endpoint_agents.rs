@@ -143,6 +143,11 @@ fn agent_rows(
             agent.focused &= row.endpoint.endpoint_id == active_endpoint_id;
             agent.depth = row.depth;
             agent.last_sibling = row.last_sibling;
+            agent.has_children = row.has_children;
+            agent.guides = row.guides;
+            if config.agent_tree && row.depth > 0 {
+                super::agent_list::compact_tree_child_row(&mut agent, row.parent_workspace);
+            }
             Some(EndpointAgentRow {
                 endpoint_id: row.endpoint.endpoint_id.clone(),
                 machine_label: row.endpoint.label.to_owned(),

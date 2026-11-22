@@ -6,7 +6,12 @@ pub(crate) struct TreeRow {
     pub index: usize,
     pub depth: usize,
     pub last: bool,
+    pub parent: Option<usize>,
+    pub has_children: bool,
+    pub guides: u8,
 }
+
+const MAX_VISUAL_DEPTH: usize = 3;
 
 pub(crate) fn plan(ids: &[&str], parents: &BTreeMap<String, String>) -> Vec<TreeRow> {
     let positions: BTreeMap<_, _> = ids.iter().enumerate().map(|(i, id)| (*id, i)).collect();
@@ -69,37 +74,100 @@ pub(crate) fn plan(ids: &[&str], parents: &BTreeMap<String, String>) -> Vec<Tree
         group.sort_by_key(|&index| ranks[index]);
     }
     let mut stack = Vec::new();
-    let push_children = |group: &[usize], depth: usize, stack: &mut Vec<TreeRow>| {
+    let push_children = |group: &[usize],
+                         parent: Option<usize>,
+                         depth: usize,
+                         guides: u8,
+                         children: &[Vec<usize>],
+                         stack: &mut Vec<TreeRow>| {
         for (at, &index) in group.iter().enumerate().rev() {
             stack.push(TreeRow {
                 index,
                 depth,
                 last: at + 1 == group.len(),
+                parent,
+                has_children: !children[index].is_empty(),
+                guides,
             });
         }
     };
-    push_children(&children[ids.len()], 0, &mut stack);
+    push_children(&children[ids.len()], None, 0, 0, &children, &mut stack);
     let mut rows = Vec::with_capacity(ids.len());
     while let Some(row) = stack.pop() {
-        push_children(&children[row.index], row.depth + 1, &mut stack);
+        let child_guides = if row.depth > 0 && !row.last && row.depth - 1 < 8 {
+            row.guides | (1u8 << (row.depth - 1))
+        } else {
+            row.guides
+        };
+        push_children(
+            &children[row.index],
+            Some(row.index),
+            row.depth + 1,
+            child_guides,
+            &children,
+            &mut stack,
+        );
         rows.push(row);
     }
     rows
 }
 
-pub(crate) fn prefix(depth: usize, last: bool, width: u16) -> String {
+fn visible_depth(depth: usize, width: u16) -> usize {
     if depth == 0 || width < 8 {
-        return String::new();
+        return 0;
     }
-    let depth = depth.min(3).min(usize::from(width.saturating_sub(6)) / 2);
+    depth
+        .min(MAX_VISUAL_DEPTH)
+        .min(usize::from(width.saturating_sub(6)) / 2)
+}
+
+pub(crate) fn prefix(depth: usize, last: bool, guides: u8, width: u16) -> String {
+    let depth = visible_depth(depth, width);
     if depth == 0 {
         return String::new();
     }
-    format!(
-        "{}{}",
-        "  ".repeat(depth - 1),
-        if last { "└─" } else { "├─" }
-    )
+    let mut out = String::with_capacity(depth * 2);
+    for level in 0..(depth - 1) {
+        if (guides & (1u8 << level)) != 0 {
+            out.push_str("│ ");
+        } else {
+            out.push_str("  ");
+        }
+    }
+    out.push_str(if last { "└─" } else { "├─" });
+    out
+}
+
+pub(crate) fn continuation_prefix(
+    depth: usize,
+    last: bool,
+    has_children: bool,
+    guides: u8,
+    width: u16,
+) -> String {
+    let d = visible_depth(depth, width);
+    if depth == 0 {
+        return if has_children && width >= 8 {
+            "│ ".to_string()
+        } else {
+            "  ".to_string()
+        };
+    }
+    if d == 0 {
+        return "  ".to_string();
+    }
+    let mut out = String::with_capacity((d + 1) * 2);
+    for level in 0..(d - 1) {
+        if (guides & (1u8 << level)) != 0 {
+            out.push_str("│ ");
+        } else {
+            out.push_str("  ");
+        }
+    }
+    out.push_str(if last { "  " } else { "│ " });
+    let child_visible = has_children && visible_depth(depth + 1, width) > d;
+    out.push_str(if child_visible { "│ " } else { "  " });
+    out
 }
 
 #[cfg(test)]
@@ -184,5 +252,72 @@ mod tests {
         let actual = plan(&ids, &parents);
         assert_eq!(actual.len(), names.len());
         assert_eq!(actual.last().unwrap().depth, names.len() - 1);
+    }
+
+    #[test]
+    fn guides_and_continuation_prefixes_connect_siblings_and_children() {
+        let parents = [("w1", "boss"), ("sub", "w1"), ("w2", "boss")]
+            .into_iter()
+            .map(|(c, p)| (c.to_string(), p.to_string()))
+            .collect();
+        let planned = plan(&["boss", "w1", "sub", "w2"], &parents);
+        // boss (depth 0, has_children) -> w1 (depth 1, !last, has_children)
+        //   -> sub (depth 2, last, guides bit 0 set) -> w2 (depth 1, last)
+        assert_eq!(
+            prefix(planned[0].depth, planned[0].last, planned[0].guides, 26),
+            ""
+        );
+        assert_eq!(
+            continuation_prefix(
+                planned[0].depth,
+                planned[0].last,
+                planned[0].has_children,
+                planned[0].guides,
+                26
+            ),
+            "│ "
+        );
+        assert_eq!(
+            prefix(planned[1].depth, planned[1].last, planned[1].guides, 26),
+            "├─"
+        );
+        assert_eq!(
+            continuation_prefix(
+                planned[1].depth,
+                planned[1].last,
+                planned[1].has_children,
+                planned[1].guides,
+                26
+            ),
+            "│ │ "
+        );
+        assert_eq!(
+            prefix(planned[2].depth, planned[2].last, planned[2].guides, 26),
+            "│ └─"
+        );
+        assert_eq!(
+            continuation_prefix(
+                planned[2].depth,
+                planned[2].last,
+                planned[2].has_children,
+                planned[2].guides,
+                26
+            ),
+            "│     "
+        );
+        assert_eq!(
+            prefix(planned[3].depth, planned[3].last, planned[3].guides, 26),
+            "└─"
+        );
+        assert_eq!(
+            continuation_prefix(
+                planned[3].depth,
+                planned[3].last,
+                planned[3].has_children,
+                planned[3].guides,
+                26
+            ),
+            "    "
+        );
     }
 }

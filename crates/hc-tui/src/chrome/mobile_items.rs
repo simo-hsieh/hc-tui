@@ -76,7 +76,8 @@ pub(crate) fn mobile_items(
             });
         }
         for row in agents {
-            let tree_prefix = super::agent_tree::prefix(row.depth, row.last_sibling, content_width);
+            let tree_prefix =
+                super::agent_tree::prefix(row.depth, row.last_sibling, row.guides, content_width);
             let endpoint = row.endpoint;
             let agent = row.agent;
             let workspace = endpoint

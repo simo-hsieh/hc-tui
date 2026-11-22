@@ -63,6 +63,9 @@ pub(crate) struct AggregateAgentRow<'a> {
     pub recency: u64,
     pub depth: usize,
     pub last_sibling: bool,
+    pub has_children: bool,
+    pub guides: u8,
+    pub parent_workspace: Option<&'a str>,
 }
 
 /// Endpoint-ordered agent rows. `agent_view` filtering is not part of hc-tui's
@@ -88,6 +91,9 @@ pub(crate) fn aggregate_agent_rows<'a>(
                         agent,
                         depth: 0,
                         last_sibling: true,
+                        has_children: false,
+                        guides: 0,
+                        parent_workspace: None,
                     })
                 })
         })
@@ -123,6 +129,17 @@ pub(crate) fn displayed_agent_rows<'a>(
             .any(|w| w.workspace_id == row.agent.workspace_id)
     });
     let ids: Vec<_> = rows.iter().map(|row| row.agent.pane_id.as_str()).collect();
+    let workspaces: Vec<Option<&str>> = rows
+        .iter()
+        .map(|row| {
+            row.endpoint
+                .snapshot
+                .workspaces
+                .iter()
+                .find(|w| w.workspace_id == row.agent.workspace_id)
+                .map(|w| w.label.as_str())
+        })
+        .collect();
     // Projection gives every endpoint the same full-inventory relationship Arc.
     let parents = endpoints
         .iter()
@@ -138,6 +155,9 @@ pub(crate) fn displayed_agent_rows<'a>(
             let mut row = rows[node.index].take().expect("tree emits each row once");
             row.depth = node.depth;
             row.last_sibling = node.last;
+            row.has_children = node.has_children;
+            row.guides = node.guides;
+            row.parent_workspace = node.parent.and_then(|parent_idx| workspaces[parent_idx]);
             row
         })
         .collect()

@@ -24,6 +24,9 @@ pub(crate) struct AgentRow {
     pub rows: Vec<Vec<ResolvedToken>>,
     pub depth: usize,
     pub last_sibling: bool,
+    pub has_children: bool,
+    pub guides: u8,
+    pub compact_primary: bool,
 }
 
 pub(crate) fn ordered_agent_pane_ids(
@@ -332,6 +335,9 @@ pub(crate) fn agent_row(
         rows,
         depth: 0,
         last_sibling: true,
+        has_children: false,
+        guides: 0,
+        compact_primary: false,
     })
 }
 
@@ -342,7 +348,22 @@ pub(crate) fn render_agent_row(
     config: &super::ClientShellConfig,
 ) {
     let palette = &config.palette;
-    let tree_prefix = super::agent_tree::prefix(row.depth, row.last_sibling, rect.width);
+    let tree_prefix = if config.agent_tree {
+        super::agent_tree::prefix(row.depth, row.last_sibling, row.guides, rect.width)
+    } else {
+        String::new()
+    };
+    let cont_prefix = if config.agent_tree {
+        super::agent_tree::continuation_prefix(
+            row.depth,
+            row.last_sibling,
+            row.has_children,
+            row.guides,
+            rect.width,
+        )
+    } else {
+        "  ".to_string()
+    };
     let row_style = if row.focused {
         Style::default().bg(palette.active_row_bg)
     } else {
@@ -372,26 +393,30 @@ pub(crate) fn render_agent_row(
         row.rows.clone()
     };
     for (index, tokens) in rows.iter().take(rect.height as usize).enumerate() {
-        let indent = if index == 0 { 1 } else { 3 };
         let prefix = if index == 0 {
-            tree_prefix.clone()
+            &tree_prefix
         } else {
-            " ".repeat(tree_prefix.chars().count())
+            &cont_prefix
         };
-        let mut spans = vec![ratatui::text::Span::raw(format!(
-            "{}{prefix}",
-            " ".repeat(indent)
-        ))];
+        let prefix_cols = 1 + prefix.chars().count();
+        let mut spans = vec![
+            ratatui::text::Span::raw(" "),
+            ratatui::text::Span::styled(prefix.clone(), secondary),
+        ];
+        let row_secondary = if index == 0 && row.compact_primary {
+            name_style
+        } else {
+            secondary
+        };
         spans.extend(resolved_token_spans(
             tokens,
             icon,
             status_style,
             name_style,
-            secondary,
+            row_secondary,
             secondary,
             palette,
-            rect.width
-                .saturating_sub((indent + tree_prefix.chars().count()) as u16) as usize,
+            rect.width.saturating_sub(prefix_cols as u16) as usize,
         ));
         Paragraph::new(Line::from(spans)).style(row_style).render(
             Rect::new(rect.x, rect.y + index as u16, rect.width, 1),
