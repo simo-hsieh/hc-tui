@@ -73,6 +73,7 @@ pub struct ClientShellConfig {
     pub agent_panel_sort: AgentPanelSortConfig,
     /// Session-only CLI choice; never loaded from the shared Herdr config.
     pub agent_tree: bool,
+    pub agent_tree_auto: bool,
     pub status_indicators: StatusIndicatorStyle,
     pub theme_name: String,
     pub theme_runtime: ThemeRuntimeConfig,
@@ -162,6 +163,7 @@ impl ClientShellConfig {
             agents: ui.sidebar.agents.clone(),
             agent_panel_sort: ui.agent_panel_sort,
             agent_tree: false,
+            agent_tree_auto: false,
             status_indicators: ui.status_indicators,
             theme_name,
             theme_runtime,

@@ -22,6 +22,7 @@ impl App {
             if !self.shell_state.collapsed_agents.remove(&focused) {
                 self.shell_state.collapsed_agents.insert(focused);
             }
+            self.persist_chrome_preferences();
             return;
         }
         // Focused row is a leaf inside a team: collapse its nearest ancestor and focus it.
@@ -29,6 +30,7 @@ impl App {
         if let Some(parent_row) = rows[..pos].iter().rev().find(|r| r.depth < depth) {
             let parent_id = parent_row.agent.pane_id.clone();
             self.shell_state.collapsed_agents.insert(parent_id.clone());
+            self.persist_chrome_preferences();
             self.focus_pane(parent_id);
         }
     }

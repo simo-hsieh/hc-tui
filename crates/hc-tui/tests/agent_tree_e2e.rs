@@ -130,7 +130,7 @@ async fn run_mode(tree: bool) -> Vec<(String, Value)> {
     let args = if tree {
         vec!["--agent-tree".into()]
     } else {
-        Vec::new()
+        vec!["--no-agent-tree".into()]
     };
     let mut tui = pty::spawn_tui(&env, &args, &root);
 

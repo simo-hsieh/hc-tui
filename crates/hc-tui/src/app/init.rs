@@ -57,6 +57,10 @@ impl App {
             .collapsed_groups
             .into_iter()
             .collect::<std::collections::HashSet<_>>();
+        let collapsed_agents = preferences
+            .collapsed_agents
+            .into_iter()
+            .collect::<std::collections::HashSet<_>>();
         let sidebar_collapsed_manual = preferences.sidebar_collapsed.is_some();
         let sidebar_width_manual = preferences.sidebar_width.is_some();
         let sidebar_section_split_manual = preferences.sidebar_section_split.is_some();
@@ -132,6 +136,7 @@ impl App {
             navigate_target: None,
             shell_state: ShellState {
                 collapsed_groups,
+                collapsed_agents,
                 remote_collapsed_groups,
                 sidebar_collapsed,
                 sidebar_section_split,

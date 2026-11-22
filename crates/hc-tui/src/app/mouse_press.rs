@@ -181,6 +181,7 @@ impl App {
             if !self.shell_state.collapsed_agents.remove(&id) {
                 self.shell_state.collapsed_agents.insert(id);
             }
+            self.persist_chrome_preferences();
             return;
         }
         if let Some((_, endpoint_id, pane_id)) = hits

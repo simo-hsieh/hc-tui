@@ -1,49 +1,46 @@
-# Optional worker tree
+# Worker tree & sidebar orchestration
 
 ## Objective
 
-Implement the [agent-tree requirements](intent.md) without changing terminal placement or runtime behavior.
+Show parent-derived agent hierarchies and clean workspace lists in `hc-tui` without changing terminal placement, shared Herdr configuration, or `herdr-core` runtime behavior.
 
 ## Background
 
-Core already sends `Terminal.parent`. Existing agent rows require live reporting programs, so a shell or finished parent can be absent from the list. Projection caches are per endpoint, while parent chains can cross endpoints and hidden terminals. Rendering and navigation share aggregate row ordering. The old flat ordering also drives receipt allocation and must not be changed globally.
+Core already sends `Terminal.parent` and OSC 7501 `Status` (`state`, `kind`, `progress`, `app`, `title`, `msg`). Existing agent rows require live reporting programs, so a shell or finished parent can be absent from the list. Projection caches are per endpoint, while parent chains can cross endpoints and hidden terminals. When panes are closed in `Herdr.app` or via `hc kill`, `herdr-core` retains them as `state = "finished", reason = "killed"` while `Herdr.app` removes them from its layout document; opaque `sp...`/`tb...` space IDs also surface on fallback terminals.
 
 ## Design
 
-Enable the always-expanded tree with `hc-tui --agent-tree`. The option belongs to this viewer, survives live config reload, and is not written to shared Herdr configuration. Omitting it preserves the existing flat behavior. [D1]
+Tree mode auto-enables whenever any inventory terminal reports a `parent` ID (`agent_tree_auto = true` by default on CLI launch). `--agent-tree` forces tree mode on and `--no-agent-tree` forces flat mode; live config reload preserves both flags and never writes to shared Herdr configuration. [D1]
 
 ```mermaid
 flowchart LR
-    A[Core inventory] --> B[Parent map]
-    B --> C[Tree row planner]
-    C --> D[Render and navigation]
+    A["Core inventory"] --> B["Structure reader (normalize spaces)"]
+    B --> C["Parent map + status"]
+    C --> D["Tree planner + collapse"]
+    D --> E["Sidebar render + viewer-local state"]
 ```
 
-Projection builds a shared parent map from the full inventory after endpoint cache lookup. Each snapshot references the same immutable map. Hidden and non-agent terminals remain available as ancestry intermediates. Parent IDs match terminal IDs exactly; unknown aliases become roots. No hostname inference is added. [D2]
+Projection builds a shared parent map from the full inventory after endpoint cache lookup. Each snapshot references the same immutable map. Hidden and non-agent terminals remain available as ancestry intermediates. Parent IDs match terminal IDs exactly; unknown aliases become roots.
 
-The planner consumes the existing flat ranking and returns row indices, depth and sibling position. It changes neither snapshot agent order nor state used by completion receipts. Aggregate tree planning runs once after cross-endpoint priority sorting. Single-endpoint views use the same planner. Workspace rows retain their original flat order. The Agents portion of the collapsed sidebar uses the tree order so its numbers match indexed focus. [D3]
+The planner (`agent_tree::plan_with_status`) consumes the existing flat ranking and returns row indices, depth, sibling position, ancestor guide bitmask, and bottom-up `TeamSummary` counts. `apply_collapse` filters descendants of collapsed parent IDs so expanded rendering, mouse hits, and `Alt+Up`/`Alt+Down` navigation agree. Collapsed parent IDs persist in the viewer-local chrome preferences file (`$XDG_STATE_HOME/hc-tui/client-shell/*.json`) and prune missing terminal IDs on inventory refresh. [D2, D3]
+
+Space normalization stays in `structure/reader.rs` and `project.rs`: unattached `finished` + `killed` terminals are skipped so closed `Herdr.app` panes never resurrect as ghost spaces, opaque `sp`/`tb`-prefixed hex, 32-char hex, UUID, and 6+ digit IDs fall back to repo/folder names while keeping their grouping key, and unnamed fallback terminals merge into matching `herdr-app` folder spaces. Multi-endpoint sidebars label their header `spaces` to match `Herdr.app`. [D4]
 
 ## Detailed design
 
-Resolve each visible agent to its nearest visible ancestor through the parent map. Stop on missing records or repeated IDs. Then break cycles in the compressed visible graph by clearing the parent link of the lexicographically smallest canonical ID in each cycle. This second check handles cycles that pass through invisible terminals.
+Resolve each visible agent to its nearest visible ancestor through the parent map. Stop on missing records or repeated IDs, then break cycles in the compressed visible graph by clearing the parent link of the lexicographically smallest canonical ID in each cycle. Rank each subtree by the best original flat rank among its members and emit depth-first with the parent before its children. Traversal is iterative; visual depth is bounded to 3 independently of tree depth.
 
-Rank each subtree by the best original flat rank among its members. Sort roots and sibling subtrees by that rank, then emit depth-first with the parent before its children. A blocked child can lift its family without changing the parent's status. Traversal is iterative; visual depth is bounded independently of tree depth. [D3]
+Expanded rows draw continuous `│`, `├─`, and `└─` guides in muted `overlay0` across multi-line rows and nested siblings. Child rows sharing their parent's workspace drop the redundant workspace prefix and promote their task/tab name to primary bold weight; duplicate single-token second-line agent names are omitted. [D1]
 
-Rows for shell parents are never invented. Several agents launched by a shell without an agent ancestor remain separate roots. A missing parent never hides a child. Known stale parents remain visible and dimmed; keyboard targets continue to skip offline endpoints using indices from the rendered list. Multiple status records in one terminal do not create child rows. [D2, D3]
+On line 0, right-aligned badges show OSC 7501 `kind` (`perm`/`ask`/`auth`) or `progress` (`%`) on active/blocked rows, a clickable `▾` chevron on expanded parents, and a rolled-up `▸ N! M●` `TeamSummary` badge on collapsed parents (with a 2-column breathing reserve so truncated titles never collide). Clicking `▾`/`▸` or pressing `Ctrl+B t` toggles collapse and persists `collapsed_agents` to the viewer-local preferences file; `refresh_projection` prunes any collapsed ID absent from live inventory and re-persists on change. [D2, D3]
 
-Expanded rows use `├─` and `└─` connectors with bounded indentation. Deeper rows use blank ancestor padding rather than vertical continuation guides. Collapsed lists use tree order without connectors. Mobile uses a width-bounded prefix. Existing focus-reveal behavior works from the final row indices. Every mouse target keeps the real endpoint and terminal address. Indexed focus refers to the displayed tree row when the option is enabled. Tree mode omits rows without a matching workspace, the same eligibility check used by the row renderer; flat mode keeps its existing path. [D4]
+## Decisions recorded
 
-The tree performs no RPCs. Reconnect snapshots rebuild it through ordinary projection. No tree state is persisted. A config reload must explicitly preserve the CLI mode when rebuilding shell configuration. [D1, D2]
-
-## Alternatives considered
-
-- D1, enablement: choose a session-only CLI option. Shared config keys can produce warnings in old Herdr; persistence and an in-app toggle are deferred.
-- D2, ancestry transport: choose one projection-wide immutable parent map. Pane-only maps miss hidden intermediates; per-agent ancestry vectors duplicate data and complicate cross-endpoint caching.
-- D3, priority: choose the best member's original rank. Root-only ranking can bury urgent workers. Parent status remains unchanged. Reopen if family movement proves confusing.
-- D4, expansion: choose always-expanded rows with no new keys. Collapse adds hidden-focus and persistence rules that are not needed for this first version.
+- **D1 — Enablement (chosen: Auto-enable when workers have parent):** Tree mode activates automatically whenever `!snapshot.terminal_parents.is_empty()`; `--agent-tree` and `--no-agent-tree` override it explicitly. *Reopen if:* unexpected flat-mode regressions appear when parent links exist.
+- **D2 — Collapse persistence (chosen: Persist in viewer-local cache file):** `collapsed_agents` is stored in `ClientChromePreferences` under `$XDG_STATE_HOME/hc-tui/client-shell/` and pruned on inventory refresh. *Reopen if:* cross-viewer collapse sync is needed.
+- **D3 — Status & team badges (chosen: Show roll-up badges mainly when collapsed):** `agent_tree.rs` computes `TeamSummary` bottom-up and renders compact roll-up badges (`▸ 1! 2●`) on collapsed parent rows, keeping expanded parent rows uncluttered (`▾`). *Reopen if:* expanded parent headers also need live descendant counts.
+- **D4 — Space normalization (chosen: Keep normalization in `structure/reader.rs`):** Skip unattached `finished · killed` terminals, resolve `sp`/`tb` hex and other opaque IDs to folder/repo names in `project.rs`/`reader.rs`, and merge duplicate folder spaces. *Reopen if:* `herdr-core` begins pruning killed records automatically.
 
 ## Verification
 
-Tests cover pure forest ordering and cycles, deep chains, shell intermediates, remote workers, stale endpoints, projection cache refresh, render and keyboard target agreement, narrow and collapsed lists, CLI parsing, and reload preservation. The PTY check exercises the actual binary against an isolated fixture. Full parity requires the documented Linux reference harness; macOS checks do not replace that run.
-
-See `docs/parity.md` for the opt-in presentation exception. Tree mode does not solve missing agent status or change shared focus and zoom.
+Tests cover forest ordering, cycles, deep chains, ancestor guide alignment, `TeamSummary` rollups, collapse filtering, opaque space ID fallbacks, CLI parsing, reload preservation, real-binary fake-core PTY (`agent_tree_e2e`), and official-core PTY (`agent_tree_real_core`). Visual verification uses the 4-step Ghostty screenshot flow against an isolated scratch `hc 0.1.21` session.

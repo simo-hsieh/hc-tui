@@ -50,6 +50,9 @@ pub struct ClientChromePreferences {
     /// Collapsed groups per remote machine.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub remote_collapsed_groups: Vec<ClientRemoteCollapsedGroups>,
+    /// Collapsed agent-tree parent terminal IDs for this viewer.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub collapsed_agents: Vec<String>,
 }
 
 /// The resolved state root: `$XDG_STATE_HOME`, else `~/.local/state` —

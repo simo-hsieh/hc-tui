@@ -32,6 +32,8 @@ pub struct Options {
     pub remote: Option<String>,
     /// Group agent rows by core parent links for this viewer only.
     pub agent_tree: bool,
+    /// Force flat agent list even when inventory terminals report parents.
+    pub no_agent_tree: bool,
 }
 
 /// Parses `args` (the program's argv tail). Errors are user-facing.
@@ -40,6 +42,7 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Action, String> {
         session: None,
         remote: None,
         agent_tree: false,
+        no_agent_tree: false,
     };
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
@@ -47,7 +50,14 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Action, String> {
             "-h" | "--help" => return Ok(Action::Help),
             "-V" | "--version" => return Ok(Action::Version),
             "--upgrade" => return Ok(Action::Upgrade),
-            "--agent-tree" => options.agent_tree = true,
+            "--agent-tree" => {
+                options.agent_tree = true;
+                options.no_agent_tree = false;
+            }
+            "--no-agent-tree" => {
+                options.no_agent_tree = true;
+                options.agent_tree = false;
+            }
             "--session" => {
                 let Some(value) = args.next() else {
                     return Err("--session needs a value".into());
@@ -223,6 +233,7 @@ pub async fn run(
     endpoint: &Endpoint,
     env: &Env,
     agent_tree: bool,
+    agent_tree_auto: bool,
 ) -> Result<Option<PathBuf>, String> {
     // The user's herdr config drives prefix + keybindings, read-only.
     let config_path = crate::config::config_path();
@@ -235,6 +246,7 @@ pub async fn run(
         config_path,
     );
     shell.agent_tree = agent_tree;
+    shell.agent_tree_auto = agent_tree_auto;
     // Chrome preferences key on the endpoint's own identity — the
     // local core's socket, or a remote's target + session — so two
     // endpoints never share a file.
@@ -376,7 +388,13 @@ pub async fn run_options(
         platform,
     )
     .map_err(|e| format!("endpoint: {e}"))?;
-    run(&endpoint, env, options.agent_tree).await
+    run(
+        &endpoint,
+        env,
+        options.agent_tree,
+        !options.agent_tree && !options.no_agent_tree,
+    )
+    .await
 }
 
 #[cfg(test)]

@@ -51,6 +51,21 @@ impl App {
                 .projections
                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         }
+        if self.shell.agent_tree_auto {
+            self.shell.agent_tree = !self.projection.snapshot.terminal_parents.is_empty();
+        }
+        if !self.view.inventory.is_offline()
+            && self.view.version > 0
+            && !self.shell_state.collapsed_agents.is_empty()
+        {
+            let before = self.shell_state.collapsed_agents.len();
+            self.shell_state
+                .collapsed_agents
+                .retain(|id| self.view.inventory.terminals().contains_key(id));
+            if self.shell_state.collapsed_agents.len() != before {
+                self.persist_chrome_preferences();
+            }
+        }
         self.update_tab_status(Instant::now());
         self.update_window_title();
         // The reference's `apply_active_snapshot` copy arms: pane loss
