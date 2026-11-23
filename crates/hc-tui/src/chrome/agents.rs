@@ -153,6 +153,36 @@ pub(crate) fn render_agent_panel_header(
         sort_width,
         1,
     );
+    let mode_label = if config.agent_tree {
+        " · tree"
+    } else {
+        " · flat"
+    };
+    let mode_x = area.x.saturating_add(7);
+    let mode_w = display_width(mode_label);
+    if mode_x.saturating_add(mode_w) < sort_rect.x {
+        put_text(
+            buffer,
+            mode_x,
+            area.y + 1,
+            mode_w,
+            mode_label,
+            Style::default()
+                .fg(if config.agent_tree {
+                    config.palette.accent
+                } else {
+                    config.palette.overlay0
+                })
+                .add_modifier(Modifier::BOLD),
+        );
+        hits.agent_tree_mode_toggle = if config.mouse_capture {
+            Rect::new(mode_x, area.y + 1, mode_w, 1)
+        } else {
+            Rect::default()
+        };
+    } else {
+        hits.agent_tree_mode_toggle = Rect::default();
+    }
     hits.agent_sort_toggle = if config.mouse_capture && agent_view_label.is_none() {
         sort_rect
     } else {

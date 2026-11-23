@@ -13,7 +13,7 @@ use ratatui::{
 use super::palette::Palette;
 use super::render::{
     ShellHitMap, ShellRenderState, WORKSPACE_HEADER_ROWS, WorkspaceHit, put_segment, put_text,
-    put_version_badge,
+    put_update_hint,
 };
 use super::snapshot::{ClientEndpointId, ClientShellSnapshot, ClientShellWorkspace};
 use super::spans::{expanded_sidebar_sections, resolved_token_spans, sidebar_section_divider_rect};
@@ -60,7 +60,7 @@ pub(crate) fn render_sidebar(
         workspace_area.width.saturating_sub(1),
         1,
     );
-    hits.update_badge = put_version_badge(
+    hits.update_badge = put_update_hint(
         buffer,
         badge_row,
         workspace_area.x.saturating_add(8),

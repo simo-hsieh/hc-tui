@@ -832,3 +832,34 @@ async fn machines_modal_delete_button_opens_remove_confirmation_on_click() {
         Some(super::super::dialogs::Target::MachineRemove { machine }) if machine == "host-a"
     ));
 }
+
+#[tokio::test]
+async fn clicking_agent_tree_mode_toggle_switches_between_flat_and_tree() {
+    let mut app = app_with_spaces(&[("t1", "work")]);
+    pending(&mut app);
+    app.area = (120, 40);
+    app.sidebar_width = 30;
+    app.shell.agent_tree = false;
+    let backend = draw_to(&mut app, 120, 40);
+    let hit = app.hit_map.agent_tree_mode_toggle;
+    assert!(!hit.is_empty(), "agent mode toggle hit is populated");
+    assert!(
+        screen_lines(&backend).iter().any(|l| l.contains("· flat")),
+        "shows · flat when off"
+    );
+
+    app.on_mouse(input::MouseInput {
+        kind: MouseEventKind::Down(MouseButton::Left),
+        col: hit.x + 1,
+        row: hit.y,
+        mods: Mods::NONE,
+        sgr_position: None,
+    });
+    assert!(app.shell.agent_tree);
+    assert!(!app.shell.agent_tree_auto);
+    let backend = draw_to(&mut app, 120, 40);
+    assert!(
+        screen_lines(&backend).iter().any(|l| l.contains("· tree")),
+        "shows · tree after click"
+    );
+}

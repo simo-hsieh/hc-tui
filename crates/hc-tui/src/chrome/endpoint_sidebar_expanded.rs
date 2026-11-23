@@ -10,7 +10,7 @@ use ratatui::{
 
 use super::endpoints::collapsed_groups_for_endpoint;
 use super::render::{
-    MachineHit, ShellHitMap, ShellRenderState, WorkspaceHit, put_text, put_version_badge,
+    MachineHit, ShellHitMap, ShellRenderState, WorkspaceHit, put_text, put_update_hint,
 };
 use super::sidebar_render::{
     displayed_workspace_status, render_parent_group_toggle, render_sidebar_footer,
@@ -64,7 +64,7 @@ pub(crate) fn render_expanded(
         workspace_area.width.saturating_sub(1),
         1,
     );
-    hits.update_badge = put_version_badge(
+    hits.update_badge = put_update_hint(
         buffer,
         badge_row,
         workspace_area.x.saturating_add(8),

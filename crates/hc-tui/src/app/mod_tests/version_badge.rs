@@ -30,21 +30,21 @@ fn drawn(app: &mut App, w: u16, h: u16) -> TestBackend {
 }
 
 #[tokio::test]
-async fn the_running_version_sits_in_the_sidebar_header() {
+async fn the_running_version_is_omitted_from_the_sidebar_header() {
     let mut app = app_with(&["t1"]);
     let backend = drawn(&mut app, 80, 24);
     let header = header(&backend);
     assert!(header.contains("spaces"), "the label stays: {header:?}");
     assert!(
-        header.contains(&version()),
-        "the running version is missing: {header:?}"
+        !header.contains(&version()),
+        "static running version is omitted from top-left header: {header:?}"
     );
     assert!(!header.contains('↑'), "no update is known: {header:?}");
     assert!(app.hit_map.update_badge.is_empty());
 }
 
 #[tokio::test]
-async fn the_expanded_machines_header_shows_the_badge() {
+async fn the_expanded_machines_header_shows_the_update_hint() {
     use super::endpoint_nav::{app_multi, spaced_term};
     use crate::sidebar::fixture::machine;
     let mut app = app_multi(
@@ -57,8 +57,8 @@ async fn the_expanded_machines_header_shows_the_badge() {
     let header = header(&backend);
     assert!(header.contains("spaces"), "the label stays: {header:?}");
     assert!(
-        header.contains(&version()),
-        "the running version is missing: {header:?}"
+        !header.contains(&version()),
+        "static version stays hidden: {header:?}"
     );
     assert!(header.contains("↑v9.9.9"), "the hint shows: {header:?}");
 }
@@ -70,38 +70,34 @@ async fn a_known_update_adds_an_accent_hint() {
     let backend = drawn(&mut app, 80, 24);
     let header = header(&backend);
     let hint_x = header.find('↑').expect("the update hint is missing") as u16;
-    let ver_x = header.find(&version()).expect("the version is missing") as u16;
     let buf = backend.buffer();
     assert_eq!(buf[(hint_x, 0)].fg, app.shell.palette.accent);
-    assert_eq!(buf[(ver_x, 0)].fg, app.shell.palette.overlay0);
-    // The click hit covers the hint, not the inert version text.
+    // The click hit covers the update hint.
     let hit = app.hit_map.update_badge;
     assert!(hit.x <= hint_x && hint_x < hit.x + hit.width && hit.y == 0);
-    assert!(!(hit.x <= ver_x && ver_x < hit.x + hit.width));
 }
 
 #[tokio::test]
 async fn a_two_digit_pair_still_shows_the_hint() {
-    // v0.1.10 → v0.1.11-class pairs: both sides carry two-digit
-    // parts and the badge must still fit at the default width.
     let mut app = app_with(&["t1"]);
     app.update_latest = Some("0.11.0".into());
     let backend = drawn(&mut app, 80, 24);
     let header = header(&backend);
-    assert!(header.contains(&version()), "the version: {header:?}");
     assert!(header.contains('↑'), "the hint dropped: {header:?}");
     assert!(!app.hit_map.update_badge.is_empty());
 }
 
 #[tokio::test]
-async fn a_narrow_sidebar_drops_the_hint_first() {
+async fn a_narrow_sidebar_drops_the_hint_when_tight() {
     let mut app = app_with(&["t1"]);
     app.sidebar_width = 18;
-    app.update_latest = Some("9.9.9".into());
+    app.update_latest = Some("999999.999.9".into());
     let backend = drawn(&mut app, 80, 24);
     let header = header(&backend);
-    assert!(header.contains(&version()), "the version stays: {header:?}");
-    assert!(!header.contains('↑'), "the hint drops first: {header:?}");
+    assert!(
+        !header.contains('↑'),
+        "the hint drops when tight: {header:?}"
+    );
     // Nothing wrote over the divider column.
     assert_eq!(backend.buffer()[(17, 0)].symbol(), "│");
     assert!(app.hit_map.update_badge.is_empty());

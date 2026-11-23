@@ -85,6 +85,7 @@ pub(crate) struct ShellHitMap {
     pub agent_scroll_metrics: Option<ScrollMetrics>,
     pub agent_max_scroll: usize,
     pub agent_sort_toggle: Rect,
+    pub agent_tree_mode_toggle: Rect,
     pub sidebar_divider: Rect,
     pub sidebar_section_divider: Rect,
     pub sidebar_toggle: Rect,
@@ -240,6 +241,7 @@ pub(crate) fn render_shell(
         hits.workspace_scrollbar = Rect::default();
         hits.agent_scrollbar = Rect::default();
         hits.agent_sort_toggle = Rect::default();
+        hits.agent_tree_mode_toggle = Rect::default();
         hits.new_workspace = Rect::default();
         hits.global_launcher = Rect::default();
         hits.machines.clear();
@@ -397,6 +399,41 @@ pub(super) fn put_version_badge(
         row.y,
         hint_w,
         hint.as_deref().unwrap_or_default(),
+        Style::default().fg(hint_color),
+    );
+    Rect::new(hint_x, row.y, hint_w, 1)
+}
+
+/// Right-aligns only the actionable update/restart hint (`↑v…` / `↻v…`) inside
+/// `row` without drawing the static running version in the sidebar header.
+pub(super) fn put_update_hint(
+    buffer: &mut Buffer,
+    row: Rect,
+    min_left: u16,
+    update_badge: UpdateBadge<'_>,
+    palette: &Palette,
+) -> Rect {
+    let hint = match update_badge {
+        UpdateBadge::Update(latest) => format!("↑v{latest}"),
+        UpdateBadge::Restart(version) => format!("↻v{version}"),
+        UpdateBadge::None => return Rect::default(),
+    };
+    let hint_w = display_width(&hint);
+    let right = row.right();
+    if right < min_left.saturating_add(hint_w) {
+        return Rect::default();
+    }
+    let hint_x = right.saturating_sub(hint_w);
+    let hint_color = match update_badge {
+        UpdateBadge::Restart(_) => palette.green,
+        _ => palette.accent,
+    };
+    put_text(
+        buffer,
+        hint_x,
+        row.y,
+        hint_w,
+        &hint,
         Style::default().fg(hint_color),
     );
     Rect::new(hint_x, row.y, hint_w, 1)

@@ -94,6 +94,12 @@ impl App {
             }
             return;
         }
+        if contains(hits.agent_tree_mode_toggle, point) {
+            self.shell.agent_tree = !self.shell.agent_tree;
+            self.shell.agent_tree_auto = false;
+            self.shell_state.agent_scroll = 0;
+            return;
+        }
         if contains(hits.agent_sort_toggle, point) {
             self.flip_agent_sort();
             self.shell_state.agent_scroll = 0;
