@@ -402,34 +402,27 @@ async fn clicking_the_menu_launcher_opens_global_menu_and_dispatches_actions() {
     let labels: Vec<_> = menu.items().iter().map(|i| i.label).collect();
     assert_eq!(
         labels,
-        [
-            "Settings",
-            "Keybinds",
-            "Machines",
-            "Add machine",
-            "Update",
-            "Detach"
-        ]
+        ["settings", "keybinds", "machines", "update", "detach"]
     );
 
     // Clicking menu again toggles it closed.
     app.on_mouse(left_click(launcher.x + 1, launcher.y));
     assert!(app.menu.is_none());
 
-    // Open and activate Settings (index 0).
+    // Open and activate settings (index 0).
     app.on_mouse(left_click(launcher.x + 1, launcher.y));
     app.menu_key(&press(Key::Enter));
     assert!(app.settings.is_some());
     app.settings = None;
 
-    // Open and activate Keybinds (index 1).
+    // Open and activate keybinds (index 1).
     app.on_mouse(left_click(launcher.x + 1, launcher.y));
     app.menu_key(&press(Key::ArrowDown));
     app.menu_key(&press(Key::Enter));
     assert!(app.help);
     app.help = false;
 
-    // Open and activate Machines (index 2).
+    // Open and activate machines (index 2).
     app.on_mouse(left_click(launcher.x + 1, launcher.y));
     for _ in 0..2 {
         app.menu_key(&press(Key::ArrowDown));
@@ -438,31 +431,19 @@ async fn clicking_the_menu_launcher_opens_global_menu_and_dispatches_actions() {
     assert!(app.machines_modal.is_some());
     app.machines_modal = None;
 
-    // Open and activate Add machine (index 3).
-    app.on_mouse(left_click(launcher.x + 1, launcher.y));
-    for _ in 0..3 {
-        app.menu_key(&press(Key::ArrowDown));
-    }
-    app.menu_key(&press(Key::Enter));
-    assert!(matches!(
-        app.dialog.as_ref().map(|d| &d.target),
-        Some(super::super::dialogs::Target::MachineAdd)
-    ));
-    app.dialog = None;
-
-    // Open and activate Update (index 4).
+    // Open and activate update (index 3).
     app.update_latest = Some("9.9.9".into());
     app.on_mouse(left_click(launcher.x + 1, launcher.y));
-    for _ in 0..4 {
+    for _ in 0..3 {
         app.menu_key(&press(Key::ArrowDown));
     }
     app.menu_key(&press(Key::Enter));
     assert!(app.update_modal.is_some());
     app.update_modal = None;
 
-    // Open and activate Detach (index 5).
+    // Open and activate detach (index 4).
     app.on_mouse(left_click(launcher.x + 1, launcher.y));
-    for _ in 0..5 {
+    for _ in 0..4 {
         app.menu_key(&press(Key::ArrowDown));
     }
     app.menu_key(&press(Key::Enter));

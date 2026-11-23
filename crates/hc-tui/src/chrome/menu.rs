@@ -102,12 +102,11 @@ impl ContextMenu {
         let item = |label, action| ContextMenuItem { label, action };
         match &self.target {
             ContextMenuTarget::Global => vec![
-                item("Settings", Action::Settings),
-                item("Keybinds", Action::Keybinds),
-                item("Machines", Action::Machines),
-                item("Add machine", Action::MachineAdd),
-                item("Update", Action::Update),
-                item("Detach", Action::Detach),
+                item("settings", Action::Settings),
+                item("keybinds", Action::Keybinds),
+                item("machines", Action::Machines),
+                item("update", Action::Update),
+                item("detach", Action::Detach),
             ],
             ContextMenuTarget::Workspace { is_git: false, .. } => {
                 vec![item("Rename", Action::Rename), item("Close", Action::Close)]
