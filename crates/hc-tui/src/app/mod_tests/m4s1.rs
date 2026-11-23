@@ -402,7 +402,14 @@ async fn clicking_the_menu_launcher_opens_global_menu_and_dispatches_actions() {
     let labels: Vec<_> = menu.items().iter().map(|i| i.label).collect();
     assert_eq!(
         labels,
-        ["Settings", "Keybinds", "Add machine", "Update", "Detach"]
+        [
+            "Settings",
+            "Keybinds",
+            "Machines",
+            "Add machine",
+            "Update",
+            "Detach"
+        ]
     );
 
     // Clicking menu again toggles it closed.
@@ -422,9 +429,18 @@ async fn clicking_the_menu_launcher_opens_global_menu_and_dispatches_actions() {
     assert!(app.help);
     app.help = false;
 
-    // Open and activate Add machine (index 2).
+    // Open and activate Machines (index 2).
     app.on_mouse(left_click(launcher.x + 1, launcher.y));
     for _ in 0..2 {
+        app.menu_key(&press(Key::ArrowDown));
+    }
+    app.menu_key(&press(Key::Enter));
+    assert!(app.machines_modal.is_some());
+    app.machines_modal = None;
+
+    // Open and activate Add machine (index 3).
+    app.on_mouse(left_click(launcher.x + 1, launcher.y));
+    for _ in 0..3 {
         app.menu_key(&press(Key::ArrowDown));
     }
     app.menu_key(&press(Key::Enter));
@@ -434,19 +450,19 @@ async fn clicking_the_menu_launcher_opens_global_menu_and_dispatches_actions() {
     ));
     app.dialog = None;
 
-    // Open and activate Update (index 3).
+    // Open and activate Update (index 4).
     app.update_latest = Some("9.9.9".into());
     app.on_mouse(left_click(launcher.x + 1, launcher.y));
-    for _ in 0..3 {
+    for _ in 0..4 {
         app.menu_key(&press(Key::ArrowDown));
     }
     app.menu_key(&press(Key::Enter));
     assert!(app.update_modal.is_some());
     app.update_modal = None;
 
-    // Open and activate Detach (index 4).
+    // Open and activate Detach (index 5).
     app.on_mouse(left_click(launcher.x + 1, launcher.y));
-    for _ in 0..4 {
+    for _ in 0..5 {
         app.menu_key(&press(Key::ArrowDown));
     }
     app.menu_key(&press(Key::Enter));
@@ -682,5 +698,113 @@ async fn inline_machine_plus_creates_workspace_on_non_active_machine_with_space_
     settle(&mut app).await;
     assert_eq!(app.pending_actions, 0);
     assert!(app.notice.is_none());
+    server.await.unwrap();
+}
+
+#[test]
+fn ssh_config_parser_discovers_concrete_hosts_and_skips_wildcards() {
+    let parsed = super::super::machines_modal::parse_ssh_config_text(
+        "# comment\nHost *\n  User ignored\n\nHost host-a alias-a\n  HostName 10.0.0.1\n  User alice\n\nHost host-b\n  HostName host-b.internal\n",
+    );
+    assert_eq!(
+        parsed,
+        vec![
+            ("host-a".into(), "alice@10.0.0.1".into()),
+            ("host-b".into(), "host-b.internal".into()),
+        ]
+    );
+}
+
+#[tokio::test]
+async fn machines_modal_renders_and_adds_discovered_ssh_host() {
+    use super::endpoint_nav::{app_multi, spaced_term};
+    use crate::sidebar::fixture::machine;
+
+    let mut app = app_multi(
+        vec![spaced_term("t1", "local-ws")],
+        vec![machine("host-a", "unreachable")],
+    );
+    pending(&mut app);
+    app.area = (100, 30);
+    app.machines_modal = Some(super::super::machines_modal::MachinesModal {
+        ssh_hosts: vec![
+            ("host-a".into(), "alice@10.0.0.1".into()),
+            ("host-b".into(), "alice@10.0.0.2".into()),
+        ],
+        selected: 0,
+        render: Default::default(),
+    });
+    let backend = draw_to(&mut app, 100, 30);
+    let screen = screen_lines(&backend).join("\n");
+    assert!(screen.contains("machines"), "title renders");
+    assert!(screen.contains("host-a"), "configured machine renders");
+    assert!(screen.contains("host-b"), "discovered ssh host renders");
+
+    let mut rx = operations(&mut app);
+    let server = tokio::spawn(async move {
+        let mut core = rx.recv().await.unwrap();
+        core.read_hello().await;
+        core.answer_hello(true, &["machine.add"], &[]).await;
+        let req = core.read_request().await;
+        assert_eq!(req["method"], "machine.add");
+        assert_eq!(req["params"], json!({"target": "host-b"}));
+        core.reply(&req["id"], json!({})).await;
+    });
+
+    app.handle_machines_key(&press(Key::ArrowDown));
+    app.handle_machines_key(&press(Key::Enter));
+    assert!(app.machines_modal.is_none());
+    assert_eq!(app.pending_actions, 1);
+    settle(&mut app).await;
+    assert_eq!(app.pending_actions, 0);
+    assert!(app.notice.is_none());
+    server.await.unwrap();
+}
+
+#[tokio::test]
+async fn clicking_offline_machine_status_badge_triggers_reconnect() {
+    use super::endpoint_nav::{app_multi, spaced_term};
+    use crate::sidebar::fixture::machine;
+
+    let mut app = app_multi(
+        vec![spaced_term("t1", "local-ws")],
+        vec![machine("host-a", "unreachable")],
+    );
+    pending(&mut app);
+    app.focused = Some("t1".into());
+    app.refresh_projection();
+    app.area = (120, 40);
+    draw_to(&mut app, 120, 40);
+
+    let remote_hit = app
+        .hit_map
+        .machines
+        .iter()
+        .find(|h| h.endpoint_id == ClientEndpointId::Remote("host-a".into()))
+        .expect("remote machine hit")
+        .clone();
+    assert!(!remote_hit.status_badge.is_empty());
+
+    let mut rx = operations(&mut app);
+    let server = tokio::spawn(async move {
+        let mut core = rx.recv().await.unwrap();
+        core.read_hello().await;
+        core.answer_hello(true, &["machine.connect"], &[]).await;
+        let req = core.read_request().await;
+        assert_eq!(req["method"], "machine.connect");
+        assert_eq!(req["params"], json!({"machine": "host-a"}));
+        core.reply(&req["id"], json!({})).await;
+    });
+
+    app.on_mouse(input::MouseInput {
+        kind: MouseEventKind::Down(MouseButton::Left),
+        col: remote_hit.status_badge.x,
+        row: remote_hit.status_badge.y,
+        mods: Mods::NONE,
+        sgr_position: None,
+    });
+    assert_eq!(app.pending_actions, 1);
+    settle(&mut app).await;
+    assert_eq!(app.pending_actions, 0);
     server.await.unwrap();
 }

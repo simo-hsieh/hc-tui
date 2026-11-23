@@ -93,8 +93,8 @@ impl App {
 
     pub(super) fn open_global_menu(&mut self, launcher: ratatui::layout::Rect) {
         self.release_pane_mouse();
-        // 5 items + 2 border rows = 7; open above the footer launcher when near the bottom.
-        let height = 7u16;
+        // 6 items + 2 border rows = 8; open above the footer launcher when near the bottom.
+        let height = 8u16;
         let y = if launcher.y >= height {
             launcher.y.saturating_sub(height)
         } else {
@@ -275,6 +275,7 @@ impl App {
                     self.help = true;
                     self.help_state = crate::chrome::help::HelpState::default();
                 }
+                ContextMenuAction::Machines => self.open_machines_modal(),
                 ContextMenuAction::MachineAdd => self.machine_add(),
                 ContextMenuAction::Update => self.open_update(),
                 ContextMenuAction::Detach => self.quitting = true,

@@ -44,6 +44,7 @@ pub(crate) enum ContextMenuAction {
     Kill,
     Settings,
     Keybinds,
+    Machines,
     Update,
     Detach,
 }
@@ -103,6 +104,7 @@ impl ContextMenu {
             ContextMenuTarget::Global => vec![
                 item("Settings", Action::Settings),
                 item("Keybinds", Action::Keybinds),
+                item("Machines", Action::Machines),
                 item("Add machine", Action::MachineAdd),
                 item("Update", Action::Update),
                 item("Detach", Action::Detach),

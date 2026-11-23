@@ -81,6 +81,7 @@ impl App {
             notes_fetch: update_flow::default_notes_fetch(),
             update_tx,
             update_rx,
+            machines_modal: None,
             update_modal: None,
             install: None,
             install_generation: 0,

@@ -42,6 +42,7 @@ pub(super) fn render_overlays_and_cursor(
         || app.menu.is_some()
         || app.navigator.is_some()
         || app.settings.is_some()
+        || app.machines_modal.is_some()
         || app.update_modal.is_some()
         || mobile_navigate
     {
@@ -260,6 +261,24 @@ pub(super) fn render_overlays_and_cursor(
     } else {
         crate::chrome::settings_render::SettingsRender::default()
     };
+    if app.machines_modal.is_some() {
+        overlay_painted = true;
+        for cell in &mut buf.content {
+            cell.modifier = Modifier::from_bits_truncate(cell.modifier.bits() & !0xf000);
+            cell.set_style(cell.style().add_modifier(Modifier::DIM));
+        }
+        let entries = app.machines_modal_entries();
+        let selected = app
+            .machines_modal
+            .as_ref()
+            .map(|m| m.selected.min(entries.len().saturating_sub(1)))
+            .unwrap_or(0);
+        let rendered =
+            crate::chrome::machines_modal::render(buf, &entries, selected, &app.shell.palette);
+        if let (Some(modal), Some(rendered)) = (app.machines_modal.as_mut(), rendered) {
+            modal.render = rendered;
+        }
+    }
     // The update card dims the background like the other overlays.
     if let Some(modal) = app.update_modal.as_ref() {
         overlay_painted = true;

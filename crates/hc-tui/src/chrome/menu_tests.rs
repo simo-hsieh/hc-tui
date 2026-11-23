@@ -144,6 +144,13 @@ fn global_menu_lists_launcher_actions() {
     let global = menu(ContextMenuTarget::Global);
     assert_eq!(
         labels(&global),
-        ["Settings", "Keybinds", "Add machine", "Update", "Detach"]
+        [
+            "Settings",
+            "Keybinds",
+            "Machines",
+            "Add machine",
+            "Update",
+            "Detach"
+        ]
     );
 }

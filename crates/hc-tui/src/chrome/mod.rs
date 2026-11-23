@@ -15,6 +15,7 @@ pub mod endpoint_sidebar_expanded;
 pub mod endpoint_sidebar_row;
 pub mod endpoints;
 pub(crate) mod help;
+pub(crate) mod machines_modal;
 pub(crate) mod menu;
 pub mod mobile;
 pub mod mobile_items;

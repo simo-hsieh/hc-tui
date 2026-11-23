@@ -112,6 +112,27 @@ impl App {
                 self.new_workspace_on(machine);
                 return;
             }
+            if contains(hit.status_badge, point)
+                && let crate::chrome::snapshot::ClientEndpointId::Remote(name) = &hit.endpoint_id
+                && self
+                    .projection
+                    .endpoints
+                    .iter()
+                    .find(|e| e.endpoint_id == hit.endpoint_id)
+                    .is_some_and(|e| {
+                        e.status != crate::chrome::snapshot::ClientEndpointStatus::Online
+                    })
+            {
+                let state = self
+                    .view
+                    .machines
+                    .as_deref()
+                    .and_then(|ms| ms.iter().find(|m| m.name == *name))
+                    .map(|m| m.state.clone())
+                    .unwrap_or_default();
+                self.connect_or_prompt_login(name, &state);
+                return;
+            }
             let id = hit.endpoint_id.clone();
             if (contains(hit.collapse_toggle, point)
                 || contains(hit.status_badge, point)

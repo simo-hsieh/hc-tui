@@ -147,6 +147,11 @@ impl App {
         }
         // The Settings overlay owns its popup: tab/choice/button hits,
         // outside-press cancel — the reference's Settings mouse branch.
+        if self.machines_modal.is_some() {
+            self.handle_machines_mouse(mouse);
+            self.sched.mark_dirty(Instant::now());
+            return;
+        }
         if self.update_modal.is_some() {
             self.handle_update_mouse(mouse);
             return;

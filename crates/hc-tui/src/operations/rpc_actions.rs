@@ -43,6 +43,10 @@ pub(super) async fn run_action(client: &Client, action: Action) -> Result<Outcom
         .await
         .map(|w| Outcome::Written(Box::new(w))),
         Action::Machine(op) => {
+            let add_target = match &op {
+                MachineOp::Add { target } => Some(target.clone()),
+                _ => None,
+            };
             let (method, params) = match op {
                 MachineOp::Add { target } => ("machine.add", json!({"target": target})),
                 MachineOp::Connect { machine } => ("machine.connect", json!({"machine": machine})),
@@ -52,10 +56,16 @@ pub(super) async fn run_action(client: &Client, action: Action) -> Result<Outcom
                 ),
                 MachineOp::Remove { machine } => ("machine.rm", json!({"machine": machine})),
             };
-            client
-                .call(method, Some(params))
-                .await
-                .map_err(|e| e.to_string())?;
+            client.call(method, Some(params)).await.map_err(|e| {
+                let message = e.to_string();
+                if let Some(target) = add_target.as_deref()
+                    && needs_terminal_machine_add(&message)
+                {
+                    format!("{message} — run `hc machine add {target}` in a terminal")
+                } else {
+                    message
+                }
+            })?;
             Ok(Outcome::Done)
         }
         Action::SendLine {
@@ -370,6 +380,24 @@ pub(super) fn send_failure(error: hc_proto::client::CallError) -> String {
         CallError::Timeout => "Send timed out; the core may still type it.".into(),
         error => error.to_string(),
     }
+}
+
+fn needs_terminal_machine_add(message: &str) -> bool {
+    let lower = message.to_ascii_lowercase();
+    [
+        "hc_missing",
+        "incompatible",
+        "login_needed",
+        "auth_failed",
+        "host_key",
+        "password",
+        "passphrase",
+        "host key",
+        "permission denied",
+        "login",
+    ]
+    .iter()
+    .any(|needle| lower.contains(needle))
 }
 
 /// The incarnation check the reference performs for rename/close:

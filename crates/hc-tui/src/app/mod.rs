@@ -32,6 +32,7 @@ mod key_leases;
 mod key_routing;
 mod layout_actions;
 pub(crate) mod layout_mouse;
+mod machines_modal;
 mod mouse;
 mod multipane;
 mod navigation;
@@ -142,6 +143,7 @@ pub struct App {
     update_tx: mpsc::Sender<update_flow::UpdateEvent>,
     update_rx: mpsc::Receiver<update_flow::UpdateEvent>,
     /// The open update card, if any.
+    machines_modal: Option<machines_modal::MachinesModal>,
     update_modal: Option<update_modal::UpdateModal>,
     /// The installer run in flight or finished, if any.
     install: Option<install_flow::Install>,

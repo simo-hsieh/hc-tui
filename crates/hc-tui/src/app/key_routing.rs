@@ -244,6 +244,10 @@ impl App {
             self.handle_navigator_key(&press);
             return None;
         }
+        if self.machines_modal.is_some() {
+            self.handle_machines_key(&press);
+            return None;
+        }
         if self.update_modal.is_some() {
             self.handle_update_key(&press);
             return None;
