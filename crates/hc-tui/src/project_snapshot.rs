@@ -266,15 +266,22 @@ pub(super) fn structured_snapshot_from_spaces(
                 .unwrap_or(first_tab),
             new_workspace_cwd: cwd,
             number,
-            label: clean(adopted.map(|a| a.name.as_str()).unwrap_or_else(|| {
-                if space.custom_name {
-                    &space.name
+            label: {
+                let resolved = clean(adopted.map(|a| a.name.as_str()).unwrap_or_else(|| {
+                    if space.custom_name {
+                        &space.name
+                    } else {
+                        facts
+                            .and_then(|facts| facts.auto_label.as_deref())
+                            .unwrap_or(&space.name)
+                    }
+                }));
+                if resolved.is_empty() {
+                    "workspace".to_owned()
                 } else {
-                    facts
-                        .and_then(|facts| facts.auto_label.as_deref())
-                        .unwrap_or(&space.name)
+                    resolved
                 }
-            })),
+            },
             custom_label: adopted.map_or(space.custom_name, |a| a.custom_label),
             branch: facts
                 .filter(|facts| facts.state == "ready")

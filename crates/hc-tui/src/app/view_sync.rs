@@ -110,19 +110,34 @@ impl App {
                 self.project_cache
                     .preview(&self.view, self.focused.as_deref())
             });
-            let panes = match &provisional {
-                Some(p) => &p.snapshot.panes,
-                None => &self.projection.snapshot.panes,
+            let (panes, endpoints) = match &provisional {
+                Some(p) => (&p.snapshot.panes, &p.endpoints),
+                None => (&self.projection.snapshot.panes, &self.projection.endpoints),
+            };
+            let not_dead = |p: &&crate::chrome::snapshot::ClientShellPane| {
+                Some(&p.pane_id) != self.focused.as_ref()
             };
             let fallback = panes
                 .iter()
+                .filter(not_dead)
                 .find(|p| previous_tab.as_ref() == Some(&p.tab_id))
                 .or_else(|| {
                     panes
                         .iter()
+                        .filter(not_dead)
                         .find(|p| previous_workspace.as_ref() == Some(&p.workspace_id))
                 })
-                .or_else(|| panes.first())
+                .or_else(|| panes.iter().find(not_dead))
+                .or_else(|| {
+                    endpoints
+                        .iter()
+                        .filter(|e| {
+                            e.status == crate::chrome::snapshot::ClientEndpointStatus::Online
+                        })
+                        .filter_map(|e| e.snapshot.as_deref())
+                        .flat_map(|s| &s.panes)
+                        .find(not_dead)
+                })
                 .map(|p| p.pane_id.clone());
             if fallback != self.focused {
                 self.focused = fallback;
@@ -161,6 +176,9 @@ impl App {
             None => true,
             Some(term) => {
                 if term.labels.contains_key(crate::app::popup::POPUP_LABEL) {
+                    return true;
+                }
+                if term.state == "finished" && term.reason.as_deref() == Some("killed") {
                     return true;
                 }
                 let own = self.project_cache.own_document(&self.view);

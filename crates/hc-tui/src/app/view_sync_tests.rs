@@ -61,3 +61,42 @@ fn a_tab_order_flip_under_a_stable_focus_is_a_change() {
     assert_eq!(a.focused_tab_id, b.focused_tab_id);
     assert!(tab_focus_or_order_changed(&a, &b));
 }
+
+#[test]
+fn empty_app_space_label_never_renders_blank() {
+    let mut t1 = term("host-a/t1");
+    t1.cwd.clear();
+    let mut v = view(vec![t1], vec![]);
+    v.documents_mut().insert(
+        DocKey {
+            machine: Some("host-a".into()),
+            name: "herdr-app".into(),
+        },
+        Arc::new(Document {
+            value: json!({
+                "spaces": [{
+                    "id": "sp1",
+                    "name": "",
+                    "folder": "",
+                    "tabs": [{
+                        "id": "tb1",
+                        "name": "",
+                        "root": { "type": "block", "content": { "terminal": "t1" } }
+                    }]
+                }]
+            }),
+            version: 1,
+            ..Default::default()
+        }),
+    );
+    let projected = crate::project::project(&v, Some("host-a/t1"));
+    assert!(
+        projected
+            .endpoints
+            .iter()
+            .filter_map(|e| e.snapshot.as_deref())
+            .flat_map(|s| &s.workspaces)
+            .all(|w| !w.label.is_empty()),
+        "workspace labels must never be blank"
+    );
+}

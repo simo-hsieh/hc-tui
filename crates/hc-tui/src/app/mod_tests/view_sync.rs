@@ -96,3 +96,30 @@ async fn empty_focus_reconcile_still_installs_changed_publish() {
         baseline + 1,
     );
 }
+
+#[tokio::test]
+async fn killed_focused_terminal_falls_back_to_live_sibling() {
+    let mut t1 = crate::sidebar::fixture::term("t1");
+    t1.labels.insert("herdr.space".into(), "work".into());
+    let mut t2 = crate::sidebar::fixture::term("t2");
+    t2.labels.insert("herdr.space".into(), "other".into());
+    let mut app = app();
+    app.open_attach = Arc::new(|_| Box::pin(std::future::pending()));
+    app.pane = pane::Pane::new(app.pane_tx.clone(), app.open_attach.clone());
+    app.view = crate::sidebar::fixture::view(vec![t1.clone(), t2.clone()], vec![]);
+    app.focused = Some("t1".into());
+    app.reconcile_published_view();
+    assert_eq!(app.focused.as_deref(), Some("t1"));
+
+    // t1 is killed externally while still present in inventory as finished/killed.
+    t1.state = "finished".into();
+    t1.reason = Some("killed".into());
+    app.view = crate::sidebar::fixture::view(vec![t1, t2], vec![]);
+    app.view.version += 1;
+    app.reconcile_published_view();
+    assert_eq!(
+        app.focused.as_deref(),
+        Some("t2"),
+        "focus must move away from a finished/killed terminal"
+    );
+}

@@ -151,7 +151,21 @@ pub fn read(terms: &[&Terminal], document: &Value, machine: Option<&str>) -> Vec
                 let label = if named {
                     name.clone()
                 } else {
-                    basename(&folder).to_owned()
+                    let from_folder = basename(&folder);
+                    if !from_folder.is_empty() {
+                        from_folder.to_owned()
+                    } else {
+                        mapped
+                            .iter()
+                            .flat_map(|tab| tab.root.terminals())
+                            .find_map(|addr| terms.iter().find(|t| t.address == addr))
+                            .map(|t| {
+                                let cwd = crate::project::repository::folder(t);
+                                basename(cwd).to_owned()
+                            })
+                            .filter(|s| !s.is_empty())
+                            .unwrap_or_else(|| "workspace".to_owned())
+                    }
                 };
                 spaces.push(Space {
                     from_app: true,
