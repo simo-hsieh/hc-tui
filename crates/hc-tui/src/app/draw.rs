@@ -54,7 +54,7 @@ pub(crate) struct CursorWish {
 /// `render_shell`; the attached pane's VT grid fills `pane_surface`'s
 /// inner rect under the reference pane-chrome rules; the mode bar
 /// overlays the pane surface's last row outside Terminal mode.
-pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
+pub fn draw(app: &mut App, frame: &mut ratatui::Frame, now: Instant) {
     let area = frame.area();
     let buf = frame.buffer_mut();
     // Source acknowledges a current visible surface during composition, so an
@@ -73,13 +73,18 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
         );
     }
     let collapsed = app.shell_state.sidebar_collapsed;
-    let layout = app.shell.layout_config().layout(
+    let animating = app
+        .sidebar_animation
+        .is_some_and(|anim| !anim.is_finished(now));
+    let sidebar_width = app.effective_sidebar_width(area.width, now);
+    let layout = app.shell.layout_config().layout_with_sidebar_width(
         area.width,
         area.height,
-        collapsed,
         focused_tab_count(app),
-        app.sidebar_width,
+        sidebar_width,
     );
+    let render_collapsed = layout.sidebar.width <= super::sidebar_anim::COMPACT_RENDER_MAX_WIDTH
+        && (collapsed || animating);
     let update_latest = app.update_ready_version().map(str::to_owned);
     let restart_ready = app.restart_ready.clone();
     let update_badge =
@@ -98,7 +103,7 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
         reveal_focused_workspace: &mut app.shell_state.reveal_focused_workspace,
         reveal_focused_tab: &mut app.shell_state.reveal_focused_tab,
         reveal_focused_agent: &mut app.shell_state.reveal_focused_agent,
-        sidebar_collapsed: collapsed,
+        sidebar_collapsed: render_collapsed,
         sidebar_section_split: app.shell_state.sidebar_section_split,
         dragging_section_divider: matches!(
             app.chrome_drag,
@@ -228,7 +233,7 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
             continue;
         };
         let (wish, cells_read, used_cache) =
-            draw_terminal_counted(pane, content, buf, _now, suppressed);
+            draw_terminal_counted(pane, content, buf, now, suppressed);
         probe.cells_painted.fetch_add(cells_read, Ordering::Relaxed);
         if used_cache {
             cached_rects.push(content);
@@ -304,7 +309,7 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
         area,
         &layout,
         inner,
-        _now,
+        now,
         cursor,
         pane_overlay_flatten,
     );

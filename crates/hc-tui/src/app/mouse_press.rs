@@ -22,9 +22,7 @@ impl App {
             return;
         }
         if contains(hits.sidebar_toggle, point) {
-            self.shell_state.sidebar_collapsed = !self.shell_state.sidebar_collapsed;
-            self.sidebar_collapsed_manual = true;
-            self.persist_chrome_preferences();
+            self.toggle_sidebar(Instant::now());
             return;
         }
         if contains(hits.sidebar_divider, point) {

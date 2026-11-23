@@ -59,6 +59,7 @@ mod selection_copy;
 mod settings;
 mod shared;
 mod shell_state;
+mod sidebar_anim;
 mod synthesize;
 mod tab_status;
 pub(crate) mod update_flow;
@@ -243,6 +244,8 @@ pub struct App {
     /// divider; the reference's `sidebar_width` runtime field.
     sidebar_width: u16,
     sidebar_width_manual: bool,
+    /// Active collapse/expand width interpolation, if any.
+    pub(crate) sidebar_animation: Option<sidebar_anim::SidebarAnimation>,
     /// `shell_state.sidebar_collapsed` was toggled by hand — persisted
     /// as `preferences.sidebar_collapsed`.
     sidebar_collapsed_manual: bool,

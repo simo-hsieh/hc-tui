@@ -200,11 +200,47 @@ pub struct ClientShellLayoutConfig {
 }
 
 impl ClientShellLayoutConfig {
+    pub(crate) fn target_sidebar_width(
+        &self,
+        cols: u16,
+        sidebar_collapsed: bool,
+        sidebar_width: u16,
+    ) -> u16 {
+        if cols <= self.mobile_width_threshold {
+            return 0;
+        }
+        if sidebar_collapsed {
+            match self.sidebar_collapsed_mode {
+                SidebarCollapsedModeConfig::Compact => 4,
+                SidebarCollapsedModeConfig::Hidden => 0,
+            }
+        } else {
+            let (min, max) = crate::config::validated_sidebar_bounds(
+                self.sidebar_min_width,
+                self.sidebar_max_width,
+            )
+            .unwrap_or((18, 36));
+            sidebar_width.clamp(min, max)
+        }
+        .min(cols.saturating_sub(1))
+    }
+
     pub(crate) fn layout(
         &self,
         cols: u16,
         rows: u16,
         sidebar_collapsed: bool,
+        tab_count: usize,
+        sidebar_width: u16,
+    ) -> ClientShellLayout {
+        let width = self.target_sidebar_width(cols, sidebar_collapsed, sidebar_width);
+        self.layout_with_sidebar_width(cols, rows, tab_count, width)
+    }
+
+    pub(crate) fn layout_with_sidebar_width(
+        &self,
+        cols: u16,
+        rows: u16,
         tab_count: usize,
         sidebar_width: u16,
     ) -> ClientShellLayout {
@@ -218,20 +254,7 @@ impl ClientShellLayoutConfig {
             };
         }
 
-        let sidebar_width = if sidebar_collapsed {
-            match self.sidebar_collapsed_mode {
-                SidebarCollapsedModeConfig::Compact => 4,
-                SidebarCollapsedModeConfig::Hidden => 0,
-            }
-        } else {
-            let (min, max) = crate::config::validated_sidebar_bounds(
-                self.sidebar_min_width,
-                self.sidebar_max_width,
-            )
-            .unwrap_or((18, 36));
-            sidebar_width.clamp(min, max)
-        }
-        .min(cols.saturating_sub(1));
+        let sidebar_width = sidebar_width.min(cols.saturating_sub(1));
         let main = Rect::new(sidebar_width, 0, cols.saturating_sub(sidebar_width), rows);
         let show_tab_bar = rows > 1 && !(self.hide_tab_bar_when_single_tab && tab_count == 1);
         let tab_height = u16::from(show_tab_bar);

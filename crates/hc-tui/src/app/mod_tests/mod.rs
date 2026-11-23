@@ -33,6 +33,7 @@ mod remote_children;
 mod reveal_focus;
 mod review_regressions;
 mod shared_rpc;
+mod sidebar_animation;
 mod sync_output;
 mod update_card;
 mod update_source;

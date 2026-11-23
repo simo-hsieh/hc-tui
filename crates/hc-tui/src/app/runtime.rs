@@ -18,12 +18,13 @@ impl App {
         // inner rect — no clipped last column, row or cursor.
         let size = term.size()?;
         self.area = (size.width, size.height);
-        let layout = self.shell.layout_config().layout(
+        self.settle_sidebar_animation(now);
+        let sidebar_width = self.effective_sidebar_width(size.width, now);
+        let layout = self.shell.layout_config().layout_with_sidebar_width(
             size.width,
             size.height,
-            self.shell_state.sidebar_collapsed,
             pane_geometry::focused_tab_count(self),
-            self.sidebar_width,
+            sidebar_width,
         );
         let infos = pane_geometry::pane_infos(self, layout.pane_surface);
         // Zoom covers the rest of the focused tab: the reference resizes
@@ -59,11 +60,10 @@ impl App {
                     || self.pane.target() == Some(id.as_str())
                     || self.floats.values().any(|entry| &entry.terminal == id))
         });
-        // While a layout write is in flight, inventory can publish a new
-        // member before the CAS lands — a transient un-zoomed split that
-        // must not resize panes the confirmed layout will cover. Geometry
-        // still draws; size claims wait for the write to settle.
-        let settling = self.pending_actions > 0;
+        // While a layout write or sidebar animation is in flight, avoid
+        // thrashing pane PTY sizes across intermediate frames; geometry
+        // still draws and size claims settle once the transition finishes.
+        let settling = self.pending_actions > 0 || self.sidebar_animation.is_some();
         for info in infos {
             let inner = self
                 .displayed_pane(&info.id)

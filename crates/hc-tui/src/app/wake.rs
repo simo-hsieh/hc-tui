@@ -115,6 +115,7 @@ impl App {
             .chain(self.waiting_due)
             .chain(self.image_read.as_ref().map(|read| read.deadline))
             .chain(self.install_tick_deadline())
+            .chain(self.sidebar_animation_deadline())
             .min()
     }
 
@@ -178,6 +179,7 @@ impl App {
             dirty |= self.expire_notice(now);
             dirty |= self.tick_notifications(now);
             dirty |= self.tick_selection(now) | self.tick_copy_feedback(now);
+            dirty |= self.tick_sidebar_animation(now);
             if self.next_tab_status.is_some_and(|due| now >= due) {
                 dirty |= self.update_tab_status(now);
             }

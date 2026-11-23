@@ -145,6 +145,7 @@ impl App {
             },
             sidebar_width,
             sidebar_width_manual,
+            sidebar_animation: None,
             sidebar_collapsed_manual,
             sidebar_section_split_manual,
             agent_panel_sort_manual,

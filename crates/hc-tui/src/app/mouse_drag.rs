@@ -137,6 +137,7 @@ impl App {
         .unwrap_or((18, 36));
         self.sidebar_width = column.saturating_add(1).clamp(min, max);
         self.sidebar_width_manual = true;
+        self.sidebar_animation = None;
     }
 
     /// `set_sidebar_section_from_row`: split ratio over the divider
