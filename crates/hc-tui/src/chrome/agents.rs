@@ -153,18 +153,6 @@ pub(crate) fn render_agent_panel_header(
         sort_width,
         1,
     );
-    if config.agent_tree && area.x.saturating_add(15) < sort_rect.x {
-        put_text(
-            buffer,
-            area.x.saturating_add(7),
-            area.y + 1,
-            sort_rect.x.saturating_sub(area.x.saturating_add(7)),
-            " · tree",
-            Style::default()
-                .fg(config.palette.accent)
-                .add_modifier(Modifier::BOLD),
-        );
-    }
     hits.agent_sort_toggle = if config.mouse_capture && agent_view_label.is_none() {
         sort_rect
     } else {
