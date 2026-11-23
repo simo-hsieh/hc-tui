@@ -64,6 +64,7 @@ impl App {
             }
             Some(Ok(Outcome::Put { terminal, path })) => self.on_image_put(&terminal, &path),
             Some(Ok(Outcome::Done)) => {}
+            Some(Ok(Outcome::Refresh)) => self.watcher.refresh(),
             Some(Ok(Outcome::Written(written)))
                 if self
                     .view

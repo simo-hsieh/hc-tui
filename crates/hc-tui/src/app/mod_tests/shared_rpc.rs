@@ -166,7 +166,7 @@ async fn watcher_store_and_seen_share_one_rpc_which_rebuilds_once() {
     app.submit_action(connect_host_b());
     let result = settle(&mut app).await;
     assert!(
-        matches!(&result, Some(Ok(Outcome::Done))),
+        matches!(&result, Some(Ok(Outcome::Refresh))),
         "action failed: {:?}",
         result.as_ref().map(|r| r.as_ref().map(|_| ()))
     );
@@ -217,7 +217,7 @@ async fn watcher_store_and_seen_share_one_rpc_which_rebuilds_once() {
     ));
     let result = settle(&mut app).await;
     assert!(
-        matches!(&result, Some(Ok(Outcome::Done))),
+        matches!(&result, Some(Ok(Outcome::Refresh))),
         "first action after the death failed: {:?}",
         result.as_ref().map(|r| r.as_ref().map(|_| ()))
     );
@@ -293,7 +293,7 @@ async fn a_dead_cached_client_is_detected_not_called() {
                 .await
                 .unwrap()
                 .unwrap(),
-            Ok(Outcome::Done)
+            Ok(Outcome::Refresh)
         ),
         "warmup action failed"
     );
@@ -320,7 +320,7 @@ async fn a_dead_cached_client_is_detected_not_called() {
                 .await
                 .unwrap()
                 .unwrap(),
-            Ok(Outcome::Done)
+            Ok(Outcome::Refresh)
         ),
         "the first action after the death failed"
     );

@@ -114,9 +114,22 @@ impl Actor {
                     .flatten()
                     .map(|m| m.name.clone())
                     .collect();
+                let old_connected: BTreeSet<String> = self
+                    .machines
+                    .iter()
+                    .flatten()
+                    .filter(|m| m.state == "connected")
+                    .map(|m| m.name.clone())
+                    .collect();
                 let names: BTreeSet<String> =
                     list.machines.iter().map(|m| m.name.clone()).collect();
-                for name in names.difference(&old) {
+                let newly_connected: BTreeSet<String> = list
+                    .machines
+                    .iter()
+                    .filter(|m| m.state == "connected" && !old_connected.contains(&m.name))
+                    .map(|m| m.name.clone())
+                    .collect();
+                for name in names.difference(&old).chain(newly_connected.iter()) {
                     for doc in self.params.documents.clone() {
                         self.request_doc(DocKey {
                             machine: Some(name.clone()),

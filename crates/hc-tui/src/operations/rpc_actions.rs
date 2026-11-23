@@ -66,7 +66,7 @@ pub(super) async fn run_action(client: &Client, action: Action) -> Result<Outcom
                     message
                 }
             })?;
-            Ok(Outcome::Done)
+            Ok(Outcome::Refresh)
         }
         Action::SendLine {
             terminal,

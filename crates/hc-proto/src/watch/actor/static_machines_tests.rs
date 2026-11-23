@@ -56,3 +56,47 @@ fn an_older_core_that_omits_machines_reads_the_same() {
     actor.static_done(Ok((0, Ok(omitted))));
     assert_eq!(actor.machines.as_deref(), Some(&[][..]));
 }
+
+#[test]
+fn reconnecting_machine_refetches_watched_documents() {
+    use crate::machine::{MachineListResult, MachineView};
+    use crate::watch::DocKey;
+
+    let mut actor = actor();
+    actor.params.documents = vec!["herdr-app".into()];
+    let mut m = MachineView {
+        name: "host-a".into(),
+        target: "alice@host-a".into(),
+        id: "id-a".into(),
+        host: "host-a".into(),
+        hostname: None,
+        version: "0.1.22".into(),
+        state: "unreachable".into(),
+        session: None,
+        since_ms: None,
+        temporary: false,
+        via: false,
+        why: Some("offline".into()),
+    };
+    let epoch = actor.rpc_epoch;
+    actor.machines_done(Ok((
+        epoch,
+        Ok(MachineListResult {
+            machines: vec![m.clone()],
+        }),
+    )));
+    // Consume the initial doc request while unreachable.
+    actor.doc_pending.clear();
+
+    // Machine transitions to connected -> must refetch herdr-app doc.
+    m.state = "connected".into();
+    m.why = None;
+    actor.machines_done(Ok((epoch, Ok(MachineListResult { machines: vec![m] }))));
+    assert!(
+        actor.doc_pending.contains(&DocKey {
+            machine: Some("host-a".into()),
+            name: "herdr-app".into(),
+        }),
+        "transitioning a machine to connected must re-fetch its herdr-app document"
+    );
+}

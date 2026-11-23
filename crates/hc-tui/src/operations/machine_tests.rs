@@ -17,7 +17,7 @@ async fn machine_call(method: &'static str, op: MachineOp, expected: serde_json:
         .await
         .unwrap()
         .unwrap();
-    assert!(matches!(out.unwrap(), Outcome::Done));
+    assert!(matches!(out.unwrap(), Outcome::Refresh));
     server.await.unwrap();
 }
 

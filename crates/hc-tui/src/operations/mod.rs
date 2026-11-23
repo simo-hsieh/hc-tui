@@ -141,6 +141,9 @@ pub enum Outcome {
     Written(Box<Written>),
     Ran(String, u64),
     Done,
+    /// A machine-management RPC completed; refetch `machine.list` and
+    /// watched documents immediately since core emits no machine event.
+    Refresh,
     /// A `terminal.put` landed: the terminal it wrote beside plus the
     /// path the core returned.
     Put {

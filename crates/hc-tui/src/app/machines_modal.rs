@@ -22,6 +22,7 @@ impl App {
     pub(super) fn open_machines_modal(&mut self) {
         self.release_pane_mouse();
         self.chrome_drag = None;
+        self.watcher.refresh();
         let ssh_hosts = discover_ssh_hosts();
         self.machines_modal = Some(MachinesModal {
             ssh_hosts,
