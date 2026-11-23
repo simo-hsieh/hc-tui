@@ -67,9 +67,17 @@ pub(crate) fn render_expanded(
     collapsed_agents: &HashSet<String>,
     agent_scroll: &mut usize,
     reveal_focused_agent: &mut bool,
+    dragging_divider: bool,
     hits: &mut ShellHitMap,
 ) {
-    if !super::agents::render_agent_panel_header(buffer, area, agent_view_label, config, hits) {
+    if !super::agents::render_agent_panel_header(
+        buffer,
+        area,
+        agent_view_label,
+        config,
+        dragging_divider,
+        hits,
+    ) {
         return;
     }
     let rows = agent_rows(endpoints, active_endpoint_id, config, collapsed_agents);

@@ -96,6 +96,7 @@ fn tree_render_mouse_targets_and_keyboard_indices_agree_at_narrow_widths() {
             &empty,
             &mut scroll,
             &mut reveal,
+            false,
             &mut hits,
         );
         assert_eq!(

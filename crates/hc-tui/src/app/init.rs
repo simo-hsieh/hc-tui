@@ -167,6 +167,7 @@ impl App {
             tab_dragged: false,
             interaction_core: None,
             last_divider_click: None,
+            last_section_divider_click: None,
             image_paste_remote: false,
             image_paste_over_ssh: false,
             image_paste_suppress: Default::default(),

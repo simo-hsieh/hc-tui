@@ -23,8 +23,9 @@ pub(crate) fn sidebar_section_heights(total_height: u16, split_ratio: f32) -> (u
         );
     }
 
+    let min_detail = if total_height >= 10 { 5 } else { 3 };
     let workspace_height = ((total_height as f32) * split_ratio.clamp(0.1, 0.9)).round() as u16;
-    let workspace_height = workspace_height.clamp(3, total_height.saturating_sub(3));
+    let workspace_height = workspace_height.clamp(3, total_height.saturating_sub(min_detail));
     (
         workspace_height,
         total_height.saturating_sub(workspace_height),

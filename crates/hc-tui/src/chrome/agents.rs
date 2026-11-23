@@ -75,6 +75,7 @@ pub(crate) fn render_agent_panel(
     collapsed_agents: &HashSet<String>,
     agent_scroll: &mut usize,
     reveal_focused_agent: &mut bool,
+    dragging_divider: bool,
     hits: &mut ShellHitMap,
 ) {
     if !render_agent_panel_header(
@@ -82,6 +83,7 @@ pub(crate) fn render_agent_panel(
         area,
         snapshot.agent_view_label.as_deref(),
         config,
+        dragging_divider,
         hits,
     ) {
         return;
@@ -116,19 +118,39 @@ pub(crate) fn render_agent_panel_header(
     area: Rect,
     agent_view_label: Option<&str>,
     config: &super::ClientShellConfig,
+    dragging_divider: bool,
     hits: &mut ShellHitMap,
 ) -> bool {
     if area.height == 0 {
         return false;
     }
+    let rule_style = if dragging_divider {
+        Style::default()
+            .fg(config.palette.accent)
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(config.palette.surface_dim)
+    };
     put_text(
         buffer,
         area.x,
         area.y,
         area.width,
         &"─".repeat(area.width as usize),
-        Style::default().fg(config.palette.surface_dim),
+        rule_style,
     );
+    // Centered 3-cell grip cue so the horizontal section boundary reads as draggable.
+    if config.mouse_capture && area.width >= 7 {
+        let grip_x = area.x + area.width / 2 - 1;
+        let grip_style = if dragging_divider {
+            Style::default()
+                .fg(config.palette.accent)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(config.palette.overlay0)
+        };
+        put_text(buffer, grip_x, area.y, 3, "═══", grip_style);
+    }
     if area.height < 2 {
         return false;
     }

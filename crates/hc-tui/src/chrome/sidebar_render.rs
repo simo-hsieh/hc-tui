@@ -244,6 +244,7 @@ pub(crate) fn render_sidebar(
         state.collapsed_agents,
         state.agent_scroll,
         state.reveal_focused_agent,
+        state.dragging_section_divider,
         hits,
     );
 

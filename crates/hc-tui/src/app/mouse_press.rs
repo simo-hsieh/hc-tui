@@ -44,8 +44,19 @@ impl App {
             return;
         }
         if contains(hits.sidebar_section_divider, point) {
-            self.chrome_drag = Some(ChromeDrag::SidebarSection);
-            self.set_sidebar_section_from_row(point.1);
+            let now = Instant::now();
+            let double = self
+                .last_section_divider_click
+                .is_some_and(|t| now.duration_since(t) <= DOUBLE_CLICK);
+            self.last_section_divider_click = Some(now);
+            if double {
+                self.shell_state.sidebar_section_split = 0.5;
+                self.sidebar_section_split_manual = false;
+                self.persist_chrome_preferences();
+            } else {
+                self.chrome_drag = Some(ChromeDrag::SidebarSection);
+                self.set_sidebar_section_from_row(point.1);
+            }
             return;
         }
         if contains(hits.workspace_scrollbar, point) {

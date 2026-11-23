@@ -863,3 +863,73 @@ async fn clicking_agent_tree_mode_toggle_switches_between_flat_and_tree() {
         "shows · tree after click"
     );
 }
+
+#[tokio::test]
+async fn dragging_horizontal_section_divider_moves_split_and_double_click_resets() {
+    let mut app = app_with_spaces(&[("t1", "work")]);
+    pending(&mut app);
+    app.area = (120, 40);
+    let backend = draw_to(&mut app, 120, 40);
+    let divider = app.hit_map.sidebar_section_divider;
+    assert!(!divider.is_empty());
+    assert!(
+        screen_lines(&backend)[divider.y as usize].contains("═══"),
+        "horizontal divider shows centered drag grip"
+    );
+
+    // Press and drag down to row 30 -> divider moves down and highlights in accent.
+    app.on_mouse(input::MouseInput {
+        kind: MouseEventKind::Down(MouseButton::Left),
+        col: divider.x + 3,
+        row: divider.y,
+        mods: Mods::NONE,
+        sgr_position: None,
+    });
+    app.on_mouse(input::MouseInput {
+        kind: MouseEventKind::Drag(MouseButton::Left),
+        col: divider.x + 3,
+        row: 30,
+        mods: Mods::NONE,
+        sgr_position: None,
+    });
+    let dragged = draw_to(&mut app, 120, 40);
+    assert_eq!(app.hit_map.sidebar_section_divider.y, 30);
+    assert_eq!(
+        dragged.buffer()[(divider.x, 30)].fg,
+        app.shell.palette.accent,
+        "divider highlights in accent while dragging"
+    );
+    assert!(
+        !app.hit_map.global_launcher.is_empty(),
+        "bottom menu footer stays visible when dragged down"
+    );
+    app.on_mouse(input::MouseInput {
+        kind: MouseEventKind::Up(MouseButton::Left),
+        col: divider.x + 3,
+        row: 30,
+        mods: Mods::NONE,
+        sgr_position: None,
+    });
+    assert!(app.sidebar_section_split_manual);
+
+    // Double-click the divider -> resets to default split.
+    let at = app.hit_map.sidebar_section_divider;
+    for _ in 0..2 {
+        app.on_mouse(input::MouseInput {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            col: at.x + 3,
+            row: at.y,
+            mods: Mods::NONE,
+            sgr_position: None,
+        });
+        app.on_mouse(input::MouseInput {
+            kind: MouseEventKind::Up(MouseButton::Left),
+            col: at.x + 3,
+            row: at.y,
+            mods: Mods::NONE,
+            sgr_position: None,
+        });
+    }
+    assert!(!app.sidebar_section_split_manual);
+    assert_eq!(app.shell_state.sidebar_section_split, 0.5);
+}

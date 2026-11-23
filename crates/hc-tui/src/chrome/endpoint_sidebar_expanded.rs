@@ -324,6 +324,7 @@ pub(crate) fn render_expanded(
         state.collapsed_agents,
         state.agent_scroll,
         state.reveal_focused_agent,
+        state.dragging_section_divider,
         hits,
     );
     render_sidebar_footer(buffer, area, detail_area, footer_rows, config, state, hits);

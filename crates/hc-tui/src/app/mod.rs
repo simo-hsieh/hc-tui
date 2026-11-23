@@ -292,6 +292,7 @@ pub struct App {
     interaction_core: Option<String>,
     /// For the divider's double-click reset.
     last_divider_click: Option<Instant>,
+    last_section_divider_click: Option<Instant>,
     /// Image-paste bridge context (`endpoint_accepts_local_images`):
     /// the endpoint is `--remote`, or this client itself runs over SSH.
     image_paste_remote: bool,

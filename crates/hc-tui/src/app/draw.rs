@@ -100,6 +100,10 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
         reveal_focused_agent: &mut app.shell_state.reveal_focused_agent,
         sidebar_collapsed: collapsed,
         sidebar_section_split: app.shell_state.sidebar_section_split,
+        dragging_section_divider: matches!(
+            app.chrome_drag,
+            Some(super::mouse::ChromeDrag::SidebarSection)
+        ),
         tab_drag_insert_index: app.tab_drag_index,
         selected_workspace_id: app.navigate_target.as_ref(),
         reveal_navigation_workspace: &mut app.shell_state.reveal_navigation_workspace,

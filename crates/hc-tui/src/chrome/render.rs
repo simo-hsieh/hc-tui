@@ -141,6 +141,7 @@ pub(crate) struct ShellRenderState<'a> {
     pub reveal_focused_agent: &'a mut bool,
     pub sidebar_collapsed: bool,
     pub sidebar_section_split: f32,
+    pub dragging_section_divider: bool,
     pub tab_drag_insert_index: Option<usize>,
     pub selected_workspace_id: Option<&'a WorkspaceNavigationTarget>,
     pub reveal_navigation_workspace: &'a mut bool,
