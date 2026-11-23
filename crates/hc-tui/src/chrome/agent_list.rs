@@ -134,7 +134,11 @@ pub(crate) fn tree_row_badge(row: &AgentRow, palette: &Palette) -> Option<RowBad
 }
 
 fn append_summary_spans(spans: &mut Vec<Span<'static>>, summary: TeamSummary, palette: &Palette) {
-    let mut parts = 0usize;
+    let muted = Style::default().fg(palette.overlay0);
+    spans.push(Span::styled(format!(" {}", summary.total), muted));
+    if summary.blocked > 0 || summary.working > 0 {
+        spans.push(Span::styled(" ·", muted));
+    }
     if summary.blocked > 0 {
         spans.push(Span::styled(
             format!(" {}!", summary.blocked),
@@ -142,19 +146,11 @@ fn append_summary_spans(spans: &mut Vec<Span<'static>>, summary: TeamSummary, pa
                 .fg(palette.red)
                 .add_modifier(Modifier::BOLD),
         ));
-        parts += 1;
     }
     if summary.working > 0 {
         spans.push(Span::styled(
             format!(" {}●", summary.working),
             Style::default().fg(palette.yellow),
-        ));
-        parts += 1;
-    }
-    if parts == 0 {
-        spans.push(Span::styled(
-            format!(" {}", summary.total),
-            Style::default().fg(palette.overlay0),
         ));
     }
 }
@@ -195,4 +191,63 @@ pub(crate) fn agent_rows(
             row
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn collapsed_row(summary: TeamSummary) -> AgentRow {
+        AgentRow {
+            pane_id: "t1".into(),
+            status: AgentStatus::Working,
+            progress: None,
+            blocked_kind: None,
+            focused: false,
+            rows: Vec::new(),
+            depth: 0,
+            last_sibling: true,
+            has_children: true,
+            collapsed: true,
+            guides: 0,
+            summary,
+            compact_primary: false,
+        }
+    }
+
+    fn badge_text(row: &AgentRow) -> String {
+        let badge = tree_row_badge(row, &Palette::catppuccin()).expect("badge");
+        badge
+            .spans
+            .into_iter()
+            .map(|span| span.content.into_owned())
+            .collect()
+    }
+
+    #[test]
+    fn collapsed_badge_always_shows_total_subagent_count() {
+        let idle = collapsed_row(TeamSummary {
+            total: 4,
+            working: 0,
+            blocked: 0,
+            done: 0,
+        });
+        assert_eq!(badge_text(&idle), "▸ 4");
+
+        let with_working = collapsed_row(TeamSummary {
+            total: 4,
+            working: 1,
+            blocked: 0,
+            done: 0,
+        });
+        assert_eq!(badge_text(&with_working), "▸ 4 · 1●");
+
+        let with_blocked_and_working = collapsed_row(TeamSummary {
+            total: 4,
+            working: 2,
+            blocked: 1,
+            done: 1,
+        });
+        assert_eq!(badge_text(&with_blocked_and_working), "▸ 4 · 1! 2●");
+    }
 }
