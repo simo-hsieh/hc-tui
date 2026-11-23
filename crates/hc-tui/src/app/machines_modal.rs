@@ -9,7 +9,7 @@ use ratatui::layout::Position;
 
 use super::input::{MouseButton, MouseEventKind, MouseInput, TerminalKey};
 use super::*;
-use crate::chrome::machines_modal::{MachineEntry, MachinesModalRender};
+use crate::chrome::machines_modal::{MachineEntry, MachinesButton, MachinesModalRender};
 use crate::operations::{Action, MachineOp};
 
 pub(super) struct MachinesModal {
@@ -140,6 +140,18 @@ impl App {
                     self.machines_modal = None;
                     return;
                 }
+                let button = modal
+                    .render
+                    .buttons
+                    .iter()
+                    .find(|(r, _)| r.contains(pos))
+                    .map(|(_, b)| *b);
+                if let Some(button) = button {
+                    let selected = modal.selected;
+                    let entries = self.machines_modal_entries();
+                    self.activate_machines_button(button, &entries, selected);
+                    return;
+                }
                 let hit = modal
                     .render
                     .rows
@@ -147,11 +159,49 @@ impl App {
                     .find(|(r, _)| r.contains(pos))
                     .map(|(_, idx)| *idx);
                 if let Some(idx) = hit {
-                    let entries = self.machines_modal_entries();
-                    self.activate_machines_entry(&entries, idx);
+                    if modal.selected == idx {
+                        let entries = self.machines_modal_entries();
+                        self.activate_machines_entry(&entries, idx);
+                    } else {
+                        modal.selected = idx;
+                    }
                 }
             }
             _ => {}
+        }
+    }
+
+    fn activate_machines_button(
+        &mut self,
+        button: MachinesButton,
+        entries: &[MachineEntry],
+        idx: usize,
+    ) {
+        match button {
+            MachinesButton::Close => self.machines_modal = None,
+            MachinesButton::Add => {
+                self.machines_modal = None;
+                self.machine_add();
+            }
+            MachinesButton::Connect => self.activate_machines_entry(entries, idx),
+            MachinesButton::NewSpace => {
+                if let Some(MachineEntry::Configured { name, .. }) = entries.get(idx) {
+                    self.machines_modal = None;
+                    self.new_workspace_on(Some(name.clone()));
+                }
+            }
+            MachinesButton::Rename => {
+                if let Some(MachineEntry::Configured { name, .. }) = entries.get(idx) {
+                    self.machines_modal = None;
+                    self.machine_rename(name.clone());
+                }
+            }
+            MachinesButton::Delete => {
+                if let Some(MachineEntry::Configured { name, .. }) = entries.get(idx) {
+                    self.machines_modal = None;
+                    self.machine_remove(name.clone());
+                }
+            }
         }
     }
 

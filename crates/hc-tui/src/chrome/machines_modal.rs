@@ -28,10 +28,21 @@ pub(crate) enum MachineEntry {
     },
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum MachinesButton {
+    Add,
+    Connect,
+    NewSpace,
+    Rename,
+    Delete,
+    Close,
+}
+
 #[derive(Default)]
 pub(crate) struct MachinesModalRender {
     pub area: Rect,
     pub rows: Vec<(Rect, usize)>,
+    pub buttons: Vec<(Rect, MachinesButton)>,
 }
 
 pub(crate) fn render(
@@ -265,24 +276,56 @@ pub(crate) fn render(
         }
     }
 
-    // Footer shortcut bar
-    let hint = match entries.get(selected) {
-        Some(MachineEntry::Configured { .. }) => {
-            "a add · c connect · n space · r rename · d remove · esc"
-        }
-        Some(MachineEntry::SshHost { .. }) => "enter add host · a manual add · esc close",
-        None => "a add machine · esc close",
+    // Clickable action buttons in the footer bar
+    let specs: &[(&str, MachinesButton)] = match entries.get(selected) {
+        Some(MachineEntry::Configured { .. }) => &[
+            ("c connect", MachinesButton::Connect),
+            ("n +space", MachinesButton::NewSpace),
+            ("r rename", MachinesButton::Rename),
+            ("d delete", MachinesButton::Delete),
+            ("a +add", MachinesButton::Add),
+            ("esc", MachinesButton::Close),
+        ],
+        Some(MachineEntry::SshHost { .. }) => &[
+            ("↵ add host", MachinesButton::Connect),
+            ("a +add", MachinesButton::Add),
+            ("esc close", MachinesButton::Close),
+        ],
+        None => &[
+            ("a +add machine", MachinesButton::Add),
+            ("esc close", MachinesButton::Close),
+        ],
     };
-    put_text(
-        buf,
-        inner.x + 1,
-        footer_y,
-        inner.width.saturating_sub(2),
-        &truncate_end(hint, inner.width.saturating_sub(2) as usize),
-        Style::default().fg(palette.overlay0).bg(palette.panel_bg),
-    );
+    let mut buttons = Vec::new();
+    let mut bx = inner.x + 1;
+    let right_limit = inner.right().saturating_sub(1);
+    for &(label, kind) in specs {
+        let w = display_width(label);
+        if bx + w > right_limit {
+            break;
+        }
+        let rect = Rect::new(bx, footer_y, w, 1);
+        let style = match kind {
+            MachinesButton::Delete => Style::default()
+                .fg(palette.red)
+                .bg(palette.panel_bg)
+                .add_modifier(Modifier::BOLD),
+            MachinesButton::Add | MachinesButton::Connect => Style::default()
+                .fg(palette.accent)
+                .bg(palette.panel_bg)
+                .add_modifier(Modifier::BOLD),
+            _ => Style::default().fg(palette.text).bg(palette.panel_bg),
+        };
+        put_text(buf, rect.x, rect.y, rect.width, label, style);
+        buttons.push((rect, kind));
+        bx = bx.saturating_add(w + 2);
+    }
 
-    Some(MachinesModalRender { area, rows })
+    Some(MachinesModalRender {
+        area,
+        rows,
+        buttons,
+    })
 }
 
 fn machine_state_glyph(state: &str, palette: &Palette) -> (&'static str, ratatui::style::Color) {

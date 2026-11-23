@@ -808,3 +808,46 @@ async fn clicking_offline_machine_status_badge_triggers_reconnect() {
     assert_eq!(app.pending_actions, 0);
     server.await.unwrap();
 }
+
+#[tokio::test]
+async fn machines_modal_delete_button_opens_remove_confirmation_on_click() {
+    use super::endpoint_nav::{app_multi, spaced_term};
+    use crate::chrome::machines_modal::MachinesButton;
+    use crate::sidebar::fixture::machine;
+
+    let mut app = app_multi(
+        vec![spaced_term("t1", "local-ws")],
+        vec![machine("host-a", "connected")],
+    );
+    pending(&mut app);
+    app.area = (100, 30);
+    app.machines_modal = Some(super::super::machines_modal::MachinesModal {
+        ssh_hosts: Vec::new(),
+        selected: 0,
+        render: Default::default(),
+    });
+    draw_to(&mut app, 100, 30);
+    let delete_rect = app
+        .machines_modal
+        .as_ref()
+        .unwrap()
+        .render
+        .buttons
+        .iter()
+        .find(|(_, b)| *b == MachinesButton::Delete)
+        .expect("delete button hit")
+        .0;
+
+    app.on_mouse(input::MouseInput {
+        kind: MouseEventKind::Down(MouseButton::Left),
+        col: delete_rect.x,
+        row: delete_rect.y,
+        mods: Mods::NONE,
+        sgr_position: None,
+    });
+    assert!(app.machines_modal.is_none());
+    assert!(matches!(
+        app.dialog.as_ref().map(|d| &d.target),
+        Some(super::super::dialogs::Target::MachineRemove { machine }) if machine == "host-a"
+    ));
+}

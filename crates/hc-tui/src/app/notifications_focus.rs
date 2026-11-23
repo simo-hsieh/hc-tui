@@ -62,7 +62,7 @@ impl App {
             .find(|endpoint| &endpoint.endpoint_id == endpoint_id)
             .map(|endpoint| endpoint.label.clone())
             .unwrap_or_else(|| match endpoint_id {
-                ClientEndpointId::Local => "Local".to_owned(),
+                ClientEndpointId::Local => "local".to_owned(),
                 ClientEndpointId::Remote(name) => name.clone(),
             })
     }

@@ -289,7 +289,7 @@ pub(crate) fn project_with(
     mut build: impl FnMut(Option<&str>, &[&Terminal], Option<&str>) -> EndpointSnapshot,
 ) -> Projection {
     // Source client/shell/endpoints.rs local_endpoint has a fixed label.
-    let local_name = "Local".to_string();
+    let local_name = "local".to_string();
 
     let stream_offline =
         !matches!(view.link, Link::Online | Link::Static { .. }) || view.inventory.is_offline();
