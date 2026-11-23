@@ -254,6 +254,8 @@ async fn new_workspace_runs_a_kept_terminal_and_records_the_adoption() {
         core.reply(&write["id"], json!({"version":1})).await;
     });
     app.on_action(A::NewWorkspace, 80);
+    assert!(app.dialog.is_some(), "new_workspace prompts for the path");
+    app.dialog_key(&press(Key::Enter));
     assert_eq!(app.pending_actions, 1);
     settle(&mut app).await;
     assert_eq!(app.pending_actions, 0);
@@ -291,6 +293,8 @@ async fn the_mobile_new_workspace_target_suspends_the_switcher_and_dispatches() 
     });
     app.on_mobile_target(&ClientMobileTarget::NewWorkspace);
     assert!(app.mobile_switcher_suspended);
+    assert!(app.dialog.is_some(), "new_workspace prompts for the path");
+    app.dialog_key(&press(Key::Enter));
     settle(&mut app).await;
     assert_eq!(app.pending_actions, 0);
     app.resume_mobile_switcher_if_ready();
@@ -357,4 +361,254 @@ async fn the_passthrough_toggle_round_trips_through_the_menu() {
         .position(|i| i.action == ContextMenuAction::ToggleRightClickPassthrough)
         .unwrap();
     assert_eq!(items[toggle].label, "Use Herdr right-click menu");
+}
+
+#[tokio::test]
+async fn clicking_the_menu_launcher_opens_global_menu_and_dispatches_actions() {
+    let mut app = app_with_spaces(&[("t1", "work")]);
+    pending(&mut app);
+    app.area = (120, 40);
+    let backend = draw_to(&mut app, 120, 40);
+    let launcher = app.hit_map.global_launcher;
+    assert!(!launcher.is_empty(), "menu launcher hit rect is populated");
+    assert_eq!(
+        launcher.y, 39,
+        "menu launcher sits in the bottom sidebar footer (Herdr.app parity)"
+    );
+    assert_eq!(
+        app.hit_map.new_workspace.y, 1,
+        "+ new sits at the top of the spaces section"
+    );
+    let lines = screen_lines(&backend);
+    assert!(lines[38].starts_with("─"), "footer has a top border rule");
+    assert!(lines[39].contains("menu"), "footer renders menu");
+    assert!(lines[39].contains('«'), "footer renders collapse toggle");
+
+    let left_click = |col, row| input::MouseInput {
+        kind: MouseEventKind::Down(MouseButton::Left),
+        col,
+        row,
+        mods: Mods::NONE,
+        sgr_position: None,
+    };
+
+    // Click menu -> opens Global menu.
+    app.on_mouse(left_click(launcher.x + 1, launcher.y));
+    let Some(menu) = &app.menu else {
+        panic!("clicking global_launcher opens the global menu");
+    };
+    assert!(matches!(menu.target, ContextMenuTarget::Global));
+    let labels: Vec<_> = menu.items().iter().map(|i| i.label).collect();
+    assert_eq!(
+        labels,
+        ["Settings", "Keybinds", "Add machine", "Update", "Detach"]
+    );
+
+    // Clicking menu again toggles it closed.
+    app.on_mouse(left_click(launcher.x + 1, launcher.y));
+    assert!(app.menu.is_none());
+
+    // Open and activate Settings (index 0).
+    app.on_mouse(left_click(launcher.x + 1, launcher.y));
+    app.menu_key(&press(Key::Enter));
+    assert!(app.settings.is_some());
+    app.settings = None;
+
+    // Open and activate Keybinds (index 1).
+    app.on_mouse(left_click(launcher.x + 1, launcher.y));
+    app.menu_key(&press(Key::ArrowDown));
+    app.menu_key(&press(Key::Enter));
+    assert!(app.help);
+    app.help = false;
+
+    // Open and activate Add machine (index 2).
+    app.on_mouse(left_click(launcher.x + 1, launcher.y));
+    for _ in 0..2 {
+        app.menu_key(&press(Key::ArrowDown));
+    }
+    app.menu_key(&press(Key::Enter));
+    assert!(matches!(
+        app.dialog.as_ref().map(|d| &d.target),
+        Some(super::super::dialogs::Target::MachineAdd)
+    ));
+    app.dialog = None;
+
+    // Open and activate Update (index 3).
+    app.update_latest = Some("9.9.9".into());
+    app.on_mouse(left_click(launcher.x + 1, launcher.y));
+    for _ in 0..3 {
+        app.menu_key(&press(Key::ArrowDown));
+    }
+    app.menu_key(&press(Key::Enter));
+    assert!(app.update_modal.is_some());
+    app.update_modal = None;
+
+    // Open and activate Detach (index 4).
+    app.on_mouse(left_click(launcher.x + 1, launcher.y));
+    for _ in 0..4 {
+        app.menu_key(&press(Key::ArrowDown));
+    }
+    app.menu_key(&press(Key::Enter));
+    assert!(app.quitting);
+}
+
+#[tokio::test]
+async fn closing_a_workspace_on_a_non_active_machine_resolves_membership_and_keeps_focus() {
+    use super::endpoint_nav::{app_multi, spaced_term};
+    use crate::sidebar::fixture::machine;
+
+    let mut app = app_multi(
+        vec![
+            spaced_term("t1", "local-ws"),
+            spaced_term("host-a/t2", "remote-ws"),
+        ],
+        vec![machine("host-a", "connected")],
+    );
+    pending(&mut app);
+    app.focused = Some("t1".into());
+    app.shell.confirm_close = false;
+    app.refresh_projection();
+    app.area = (120, 40);
+    draw_to(&mut app, 120, 40);
+
+    // Right-click the non-active remote workspace row while Local is focused.
+    let remote_hit = app
+        .hit_map
+        .workspaces
+        .iter()
+        .find(|h| h.endpoint_id == ClientEndpointId::Remote("host-a".into()))
+        .expect("remote workspace hit")
+        .clone();
+    app.context_menu_press((remote_hit.rect.x, remote_hit.rect.y));
+    let Some(menu) = &app.menu else {
+        panic!("right-clicking a non-active endpoint workspace opens its menu");
+    };
+    assert!(matches!(
+        &menu.target,
+        ContextMenuTarget::Workspace { endpoint_id, workspace_id, .. }
+            if *endpoint_id == ClientEndpointId::Remote("host-a".into())
+                && workspace_id == &remote_hit.workspace_id
+    ));
+
+    let created_ms = app.view.inventory.get("host-a/t2").unwrap().created_ms;
+    let mut rx = operations(&mut app);
+    let server = tokio::spawn(async move {
+        let mut core = rx.recv().await.unwrap();
+        core.read_hello().await;
+        core.answer_hello(
+            true,
+            &[
+                "doc.get",
+                "doc.set",
+                "terminal.get",
+                "terminal.kill",
+                "terminal.rm",
+            ],
+            &[],
+        )
+        .await;
+        // Initial doc.get for hc-tui validation
+        let doc = core.read_request().await;
+        assert_eq!(doc["method"], "doc.get");
+        core.reply(&doc["id"], json!({"value":null,"version":0}))
+            .await;
+        // terminal.get for incarnation verification on host-a/t2
+        let get = core.read_request().await;
+        assert_eq!(get["method"], "terminal.get");
+        assert_eq!(get["params"]["terminal"], "host-a/t2");
+        let mut t = testcore::minimal_terminal();
+        t["address"] = json!("host-a/t2");
+        t["created_ms"] = json!(created_ms);
+        t["labels"] = json!({"herdr.space": "remote-ws", "herdr.tab": "tab"});
+        core.reply(&get["id"], t.clone()).await;
+        // doc.get herdr-app on host-a
+        let foreign = core.read_request().await;
+        assert_eq!(foreign["method"], "doc.get");
+        assert_eq!(foreign["params"]["on"], "host-a");
+        core.reply(&foreign["id"], json!({"value":null,"version":0}))
+            .await;
+        // terminal.kill on host-a/t2
+        let kill = core.read_request().await;
+        assert_eq!(kill["method"], "terminal.kill");
+        assert_eq!(kill["params"]["terminal"], "host-a/t2");
+        core.reply(&kill["id"], t).await;
+        // terminal.rm on host-a/t2
+        let rm = core.read_request().await;
+        assert_eq!(rm["method"], "terminal.rm");
+        core.reply(&rm["id"], json!({})).await;
+        // doc.get + doc.set to hide the closed terminal
+        let get_doc = core.read_request().await;
+        core.reply(&get_doc["id"], json!({"value":null,"version":0}))
+            .await;
+        let set_doc = core.read_request().await;
+        assert_eq!(set_doc["method"], "doc.set");
+        core.reply(&set_doc["id"], json!({"version":1})).await;
+    });
+
+    // Item 1 is "Close".
+    app.menu_key(&press(Key::ArrowDown));
+    app.menu_key(&press(Key::Enter));
+    assert_eq!(app.pending_actions, 1);
+    settle(&mut app).await;
+    assert_eq!(app.pending_actions, 0);
+    assert!(
+        app.notice.is_none(),
+        "closing remote workspace should not show an error notice"
+    );
+    assert_eq!(
+        app.focused.as_deref(),
+        Some("t1"),
+        "closing remote workspace keeps Local focus"
+    );
+    server.await.unwrap();
+}
+
+#[tokio::test]
+async fn new_workspace_accepts_custom_path_and_works_when_empty() {
+    // Empty shell: no terminals, no workspaces, no focused pane.
+    let mut app = super::endpoint_nav::app_multi(vec![], vec![]);
+    pending(&mut app);
+    app.focused = None;
+    app.refresh_projection();
+    let mut rx = operations(&mut app);
+    let server = tokio::spawn(async move {
+        let mut core = rx.recv().await.unwrap();
+        core.read_hello().await;
+        core.answer_hello(true, &["doc.get", "doc.set", "terminal.run"], &[])
+            .await;
+        for _ in 0..2 {
+            let read = core.read_request().await;
+            assert_eq!(read["method"], "doc.get");
+            core.reply(&read["id"], json!({"value":null,"version":0}))
+                .await;
+        }
+        let run = core.read_request().await;
+        assert_eq!(run["method"], "terminal.run");
+        assert_eq!(run["params"]["cwd"], "/home/user/acme-shop");
+        let mut terminal = testcore::minimal_terminal();
+        terminal["address"] = json!("t1");
+        terminal["cwd"] = json!("/home/user/acme-shop");
+        core.reply(&run["id"], terminal).await;
+        let read = core.read_request().await;
+        core.reply(&read["id"], json!({"value":null,"version":0}))
+            .await;
+        let write = core.read_request().await;
+        assert_eq!(write["method"], "doc.set");
+        let adoptions = write["params"]["value"]["adoptions"].as_object().unwrap();
+        assert_eq!(adoptions.len(), 1);
+        let adoption = adoptions.values().next().unwrap();
+        assert_eq!(adoption["name"], "acme-shop");
+        core.reply(&write["id"], json!({"version":1})).await;
+    });
+
+    app.on_action(A::NewWorkspace, 80);
+    assert!(app.dialog.is_some());
+    clear_rename(&mut app);
+    app.insert_dialog_text("/home/user/acme-shop");
+    app.dialog_key(&press(Key::Enter));
+    assert_eq!(app.pending_actions, 1);
+    settle(&mut app).await;
+    assert_eq!(app.pending_actions, 0);
+    assert!(app.notice.is_none());
+    server.await.unwrap();
 }

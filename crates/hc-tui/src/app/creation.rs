@@ -167,30 +167,75 @@ impl App {
             }),
         })
     }
-    /// A brand-new workspace: one terminal, one tab, fresh stable space and
-    /// tab identities, and an adoption entry recording its label — the
-    /// reference's `Method::WorkspaceCreate` plus its workspace-label write.
-    pub(super) fn workspace_creation(&self) -> Result<(Creation, String), String> {
+    /// Default `(machine, cwd)` for a new workspace — works even when the
+    /// shell has no focused terminal or workspace yet.
+    pub(super) fn default_new_workspace_target(&self) -> (Option<String>, String) {
         let terminal = self
             .focused
             .as_ref()
-            .and_then(|id| self.view.inventory.get(id))
-            .ok_or("No focused terminal")?;
-        let machine = terminal.address.split_once('/').map(|(m, _)| m);
-        let snapshot = &self.projection.snapshot;
-        let workspace = snapshot
+            .and_then(|id| self.view.inventory.get(id));
+        let machine = terminal
+            .and_then(|t| t.address.split_once('/').map(|(m, _)| m.to_owned()))
+            .or_else(|| match &self.projection.active_endpoint_id {
+                crate::chrome::snapshot::ClientEndpointId::Local => None,
+                crate::chrome::snapshot::ClientEndpointId::Remote(name) => Some(name.clone()),
+            });
+        let workspace_cwd = self
+            .projection
+            .snapshot
             .focused_workspace_id
             .as_ref()
-            .and_then(|id| snapshot.workspaces.iter().find(|w| &w.workspace_id == id))
-            .ok_or("No focused workspace")?;
-        // The reference creates the new workspace in the focused workspace's
-        // `new_workspace_cwd` (checkout root, else its folder).
-        let cwd = if workspace.new_workspace_cwd.is_empty() {
-            terminal.cwd.clone()
+            .and_then(|id| {
+                self.projection
+                    .snapshot
+                    .workspaces
+                    .iter()
+                    .find(|w| &w.workspace_id == id)
+            })
+            .map(|w| w.new_workspace_cwd.as_str())
+            .filter(|s| !s.is_empty());
+        let cwd = if let Some(cwd) = workspace_cwd {
+            cwd.to_owned()
+        } else if let Some(cwd) = terminal.map(|t| t.cwd.as_str()).filter(|s| !s.is_empty()) {
+            cwd.to_owned()
+        } else if machine.is_none() {
+            std::env::current_dir()
+                .ok()
+                .map(|p| p.to_string_lossy().into_owned())
+                .or_else(|| std::env::var_os("HOME").map(|h| h.to_string_lossy().into_owned()))
+                .unwrap_or_default()
         } else {
-            workspace.new_workspace_cwd.clone()
+            String::new()
         };
-        let suggested = suggested_name(&cwd);
+        (machine, cwd)
+    }
+
+    /// A brand-new workspace: one terminal, one tab, fresh stable space and
+    /// tab identities, and an adoption entry recording its label — the
+    /// reference's `Method::WorkspaceCreate` plus its workspace-label write.
+    #[cfg(test)]
+    pub(super) fn workspace_creation(&self) -> Result<(Creation, String), String> {
+        let (machine, cwd) = self.default_new_workspace_target();
+        self.workspace_creation_in(machine.as_deref(), &cwd)
+    }
+
+    /// Build a new-workspace `Creation` targeting an explicit machine and
+    /// folder path (empty path lets the core choose its default home folder).
+    pub(super) fn workspace_creation_in(
+        &self,
+        machine: Option<&str>,
+        cwd: &str,
+    ) -> Result<(Creation, String), String> {
+        let trimmed = cwd.trim();
+        let resolved_cwd = if trimmed.is_empty() {
+            None
+        } else {
+            Some(expand_local_tilde(trimmed, machine))
+        };
+        let suggested = resolved_cwd
+            .as_deref()
+            .map(suggested_name)
+            .unwrap_or_else(|| "~".into());
         let raw_space = opaque_id()?;
         let raw_tab = opaque_id()?;
         let own_space = format!("space:{}:{raw_space}", raw_space.len());
@@ -200,7 +245,7 @@ impl App {
         let creation = Creation {
             params: hc_proto::terminal::RunParams {
                 on: machine.map(str::to_owned),
-                cwd: Some(cwd),
+                cwd: resolved_cwd,
                 no_parent: true,
                 no_notify: true,
                 keep: true,
@@ -244,6 +289,27 @@ impl App {
             Err(error) => self.show_notice("Split unavailable", &error),
         }
     }
+}
+
+/// Expand a leading `~` or `~/` against `$HOME` for local workspace paths.
+/// Remote paths stay untouched so the remote machine resolves them.
+fn expand_local_tilde(path: &str, machine: Option<&str>) -> String {
+    if machine.is_some() {
+        return path.to_owned();
+    }
+    let Some(home) = std::env::var_os("HOME").map(|h| h.to_string_lossy().into_owned()) else {
+        return path.to_owned();
+    };
+    if home.is_empty() {
+        return path.to_owned();
+    }
+    if path == "~" {
+        return home;
+    }
+    if let Some(rest) = path.strip_prefix("~/") {
+        return format!("{}/{rest}", home.trim_end_matches('/'));
+    }
+    path.to_owned()
 }
 
 /// The reference's fallback workspace label for a non-checkout cwd: the

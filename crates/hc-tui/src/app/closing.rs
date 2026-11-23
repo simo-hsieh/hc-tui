@@ -15,10 +15,20 @@ impl App {
         if ids.is_empty() {
             return None;
         }
-        let snapshot = &self.projection.snapshot;
         let machine = ids
             .first()
             .and_then(|id| id.split_once('/').map(|(m, _)| m.to_owned()));
+        let target_endpoint_id = match &machine {
+            None => crate::chrome::snapshot::ClientEndpointId::Local,
+            Some(name) => crate::chrome::snapshot::ClientEndpointId::Remote(name.clone()),
+        };
+        let target_snapshot = self
+            .projection
+            .endpoints
+            .iter()
+            .find(|e| e.endpoint_id == target_endpoint_id)
+            .and_then(|e| e.snapshot.as_deref())
+            .unwrap_or(&self.projection.snapshot);
         let terminals = ids
             .iter()
             .filter_map(|id| {
@@ -47,66 +57,85 @@ impl App {
             // Other endpoints do not publish roots here; hide() still prunes.
             Default::default()
         };
-        let memberships = snapshot
-            .panes
+        let mut memberships = std::collections::BTreeMap::new();
+        for snapshot in self
+            .projection
+            .endpoints
             .iter()
-            .filter(|p| ids.contains(&p.pane_id))
-            .map(|p| {
-                (
-                    p.pane_id.clone(),
-                    (p.workspace_id.clone(), p.tab_id.clone()),
-                )
-            })
-            .collect();
-        let survivors = snapshot
-            .panes
-            .iter()
-            .filter(|p| p.workspace_id == workspace_id)
-            .filter(|p| tab.is_none_or(|t| p.tab_id == t))
-            .filter(|p| !ids.contains(&p.pane_id))
-            .map(|p| p.pane_id.clone())
-            .collect::<Vec<_>>();
-        let next = if !survivors.is_empty() {
-            self.previous_pane
-                .clone()
-                .filter(|id| survivors.contains(id))
-                .or_else(|| survivors.first().cloned())
-        } else if let Some(tab) = tab {
-            let tabs = snapshot
-                .tabs
-                .iter()
-                .filter(|t| t.workspace_id == workspace_id)
-                .collect::<Vec<_>>();
-            let at = tabs.iter().position(|t| t.tab_id == tab).unwrap_or(0);
-            let remaining = tabs.iter().filter(|t| t.tab_id != tab).collect::<Vec<_>>();
-            remaining
-                .get(at.saturating_sub(1).min(remaining.len().saturating_sub(1)))
-                .and_then(|t| {
-                    self.projection
-                        .layouts
-                        .get(&t.tab_id)
-                        .and_then(|layout| layout.focused.clone())
-                        .or_else(|| {
-                            snapshot
-                                .panes
-                                .iter()
-                                .find(|p| p.tab_id == t.tab_id)
-                                .map(|p| p.pane_id.clone())
-                        })
-                })
-                .or_else(|| {
-                    snapshot
-                        .panes
-                        .iter()
-                        .find(|p| !ids.contains(&p.pane_id))
-                        .map(|p| p.pane_id.clone())
-                })
+            .filter_map(|e| e.snapshot.as_deref())
+            .chain(std::iter::once(&self.projection.snapshot))
+        {
+            for p in &snapshot.panes {
+                if ids.contains(&p.pane_id) {
+                    memberships
+                        .entry(p.pane_id.clone())
+                        .or_insert_with(|| (p.workspace_id.clone(), p.tab_id.clone()));
+                }
+            }
+        }
+        let closing_focused = self.focused.as_ref().is_some_and(|f| ids.contains(f));
+        let next = if !closing_focused {
+            self.focused.clone()
         } else {
-            snapshot
+            let survivors = target_snapshot
                 .panes
                 .iter()
-                .find(|p| !ids.contains(&p.pane_id))
+                .filter(|p| p.workspace_id == workspace_id)
+                .filter(|p| tab.is_none_or(|t| p.tab_id == t))
+                .filter(|p| !ids.contains(&p.pane_id))
                 .map(|p| p.pane_id.clone())
+                .collect::<Vec<_>>();
+            let other_pane = || {
+                target_snapshot
+                    .panes
+                    .iter()
+                    .find(|p| !ids.contains(&p.pane_id))
+                    .or_else(|| {
+                        self.projection
+                            .endpoints
+                            .iter()
+                            .filter_map(|e| e.snapshot.as_deref())
+                            .flat_map(|s| &s.panes)
+                            .find(|p| !ids.contains(&p.pane_id))
+                    })
+                    .map(|p| p.pane_id.clone())
+            };
+            if !survivors.is_empty() {
+                self.previous_pane
+                    .clone()
+                    .filter(|id| survivors.contains(id))
+                    .or_else(|| survivors.first().cloned())
+            } else if let Some(tab) = tab {
+                let tabs = target_snapshot
+                    .tabs
+                    .iter()
+                    .filter(|t| t.workspace_id == workspace_id)
+                    .collect::<Vec<_>>();
+                let at = tabs.iter().position(|t| t.tab_id == tab).unwrap_or(0);
+                let remaining = tabs.iter().filter(|t| t.tab_id != tab).collect::<Vec<_>>();
+                remaining
+                    .get(at.saturating_sub(1).min(remaining.len().saturating_sub(1)))
+                    .and_then(|t| {
+                        (machine == active_machine)
+                            .then(|| {
+                                self.projection
+                                    .layouts
+                                    .get(&t.tab_id)
+                                    .and_then(|layout| layout.focused.clone())
+                            })
+                            .flatten()
+                            .or_else(|| {
+                                target_snapshot
+                                    .panes
+                                    .iter()
+                                    .find(|p| p.tab_id == t.tab_id)
+                                    .map(|p| p.pane_id.clone())
+                            })
+                    })
+                    .or_else(other_pane)
+            } else {
+                other_pane()
+            }
         };
         Some(Action::Close {
             terminals,
@@ -117,10 +146,20 @@ impl App {
     }
 
     fn close_confirm(&mut self, action: Action, workspace_id: &str) {
+        self.close_confirm_on(action, None, workspace_id);
+    }
+
+    fn close_confirm_on(
+        &mut self,
+        action: Action,
+        endpoint_id: Option<&crate::chrome::snapshot::ClientEndpointId>,
+        workspace_id: &str,
+    ) {
         let Some(space) = self
             .projection
             .endpoints
             .iter()
+            .filter(|e| endpoint_id.is_none_or(|id| &e.endpoint_id == id))
             .filter_map(|e| e.snapshot.as_deref())
             .flat_map(|s| &s.workspaces)
             .find(|s| s.workspace_id == workspace_id)
@@ -131,6 +170,7 @@ impl App {
             .projection
             .endpoints
             .iter()
+            .filter(|e| endpoint_id.is_none_or(|id| &e.endpoint_id == id))
             .filter_map(|e| e.snapshot.as_deref())
             .flat_map(|s| &s.panes)
             .filter(|p| p.workspace_id == workspace_id)
@@ -242,10 +282,19 @@ impl App {
     /// `request_workspace_close`: kill every pane of the workspace (close
     /// group is identical for a single root), with the same confirmation.
     pub(super) fn close_workspace(&mut self, workspace_id: &str) {
+        self.close_workspace_on(None, workspace_id);
+    }
+
+    pub(super) fn close_workspace_on(
+        &mut self,
+        endpoint_id: Option<&crate::chrome::snapshot::ClientEndpointId>,
+        workspace_id: &str,
+    ) {
         let ids = self
             .projection
             .endpoints
             .iter()
+            .filter(|e| endpoint_id.is_none_or(|id| &e.endpoint_id == id))
             .filter_map(|e| e.snapshot.as_deref())
             .flat_map(|s| &s.panes)
             .filter(|p| p.workspace_id == workspace_id)
@@ -255,7 +304,7 @@ impl App {
             return;
         };
         if self.shell.confirm_close {
-            self.close_confirm(action, workspace_id);
+            self.close_confirm_on(action, endpoint_id, workspace_id);
         } else {
             self.submit_action(action);
         }

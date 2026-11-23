@@ -145,6 +145,10 @@ impl App {
             self.new_workspace();
             return;
         }
+        if contains(hits.global_launcher, point) {
+            self.open_global_menu(hits.global_launcher);
+            return;
+        }
         let group_toggle = hits.workspaces.iter().find_map(|hit| {
             let (rect, key) = hit.group_toggle.as_ref()?;
             contains(*rect, point).then(|| (hit.endpoint_id.clone(), key.clone()))

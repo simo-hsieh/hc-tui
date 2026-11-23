@@ -59,16 +59,14 @@ impl App {
             return;
         }
         if !self.shell_state.sidebar_collapsed {
-            let workspace_id = self
+            let workspace_hit = self
                 .hit_map
                 .workspaces
                 .iter()
-                .find(|h| {
-                    h.endpoint_id == self.projection.active_endpoint_id && contains(h.rect, point)
-                })
-                .map(|h| h.workspace_id.clone());
-            if let Some(workspace_id) = workspace_id {
-                self.open_workspace_context_menu(&workspace_id, point);
+                .find(|h| contains(h.rect, point))
+                .map(|h| (h.endpoint_id.clone(), h.workspace_id.clone()));
+            if let Some((endpoint_id, workspace_id)) = workspace_hit {
+                self.open_workspace_context_menu(&endpoint_id, &workspace_id, point);
                 return;
             }
         }
@@ -93,11 +91,34 @@ impl App {
         }
     }
 
-    fn open_workspace_context_menu(&mut self, workspace_id: &str, point: (u16, u16)) {
+    pub(super) fn open_global_menu(&mut self, launcher: ratatui::layout::Rect) {
+        self.release_pane_mouse();
+        // 5 items + 2 border rows = 7; open above the footer launcher when near the bottom.
+        let height = 7u16;
+        let y = if launcher.y >= height {
+            launcher.y.saturating_sub(height)
+        } else {
+            launcher.y.saturating_add(1)
+        };
+        self.menu = Some(ContextMenu {
+            target: ContextMenuTarget::Global,
+            x: launcher.x,
+            y,
+            highlighted: 0,
+        });
+    }
+
+    fn open_workspace_context_menu(
+        &mut self,
+        endpoint_id: &crate::chrome::snapshot::ClientEndpointId,
+        workspace_id: &str,
+        point: (u16, u16),
+    ) {
         let Some(workspace) = self
             .projection
             .endpoints
             .iter()
+            .filter(|e| &e.endpoint_id == endpoint_id)
             .filter_map(|e| e.snapshot.as_deref())
             .flat_map(|s| &s.workspaces)
             .find(|w| w.workspace_id == workspace_id)
@@ -110,6 +131,7 @@ impl App {
         let is_git = workspace.worktree.is_some() || workspace.branch.is_some();
         self.menu = Some(ContextMenu {
             target: ContextMenuTarget::Workspace {
+                endpoint_id: endpoint_id.clone(),
                 workspace_id: workspace_id.to_owned(),
                 is_git,
                 is_linked_worktree: workspace
@@ -216,6 +238,12 @@ impl App {
                 }
             }
             MouseEventKind::Down(MouseButton::Left) => {
+                if matches!(menu.target, ContextMenuTarget::Global)
+                    && contains(self.hit_map.global_launcher, (mouse.col, mouse.row))
+                {
+                    self.menu = None;
+                    return;
+                }
                 let row = self
                     .hit_map
                     .context_menu_rows
@@ -241,9 +269,26 @@ impl App {
         };
         let action = item.action;
         match &menu.target {
-            ContextMenuTarget::Workspace { workspace_id, .. } => match action {
+            ContextMenuTarget::Global => match action {
+                ContextMenuAction::Settings => self.open_settings_overlay(),
+                ContextMenuAction::Keybinds => {
+                    self.help = true;
+                    self.help_state = crate::chrome::help::HelpState::default();
+                }
+                ContextMenuAction::MachineAdd => self.machine_add(),
+                ContextMenuAction::Update => self.open_update(),
+                ContextMenuAction::Detach => self.quitting = true,
+                _ => {}
+            },
+            ContextMenuTarget::Workspace {
+                endpoint_id,
+                workspace_id,
+                ..
+            } => match action {
                 ContextMenuAction::Rename => self.rename_workspace_for(workspace_id),
-                ContextMenuAction::Close => self.close_workspace(workspace_id),
+                ContextMenuAction::Close => {
+                    self.close_workspace_on(Some(endpoint_id), workspace_id)
+                }
                 _ => self.show_notice(
                     "Unavailable",
                     "Worktree groups aren't available in hc-tui yet",

@@ -12,8 +12,8 @@ use ratatui::{
 
 use super::palette::Palette;
 use super::render::{
-    ShellHitMap, ShellRenderState, WORKSPACE_HEADER_ROWS, WorkspaceHit, put_right_text,
-    put_segment, put_text, put_version_badge,
+    ShellHitMap, ShellRenderState, WORKSPACE_HEADER_ROWS, WorkspaceHit, put_segment, put_text,
+    put_version_badge,
 };
 use super::snapshot::{ClientEndpointId, ClientShellSnapshot, ClientShellWorkspace};
 use super::spans::{expanded_sidebar_sections, resolved_token_spans, sidebar_section_divider_rect};
@@ -69,13 +69,25 @@ pub(crate) fn render_sidebar(
     );
 
     let entries = workspace_entries(snapshot, state.collapsed_groups);
+    if config.mouse_capture && workspace_area.height > 1 {
+        let new_y = workspace_area.y.saturating_add(1);
+        let label = " + new";
+        let width = super::render::display_width(label).min(workspace_area.width);
+        hits.new_workspace = Rect::new(workspace_area.x, new_y, width, 1);
+        put_text(
+            buffer,
+            workspace_area.x,
+            new_y,
+            workspace_area.width,
+            label,
+            Style::default().fg(palette.overlay0),
+        );
+    }
     let body = Rect::new(
         workspace_area.x,
         workspace_area.y.saturating_add(WORKSPACE_HEADER_ROWS),
         workspace_area.width,
-        workspace_area
-            .height
-            .saturating_sub(WORKSPACE_HEADER_ROWS + 1),
+        workspace_area.height.saturating_sub(WORKSPACE_HEADER_ROWS),
     );
     hits.workspace_body = body;
     let row_heights = entries
@@ -217,53 +229,16 @@ pub(crate) fn render_sidebar(
         );
     }
 
-    let footer_y = workspace_area.bottom().saturating_sub(1);
-    if config.mouse_capture {
-        hits.new_workspace = Rect::new(
-            workspace_area.x,
-            footer_y,
-            5.min(workspace_area.width),
-            u16::from(workspace_area.height > 0),
-        );
-        put_text(
-            buffer,
-            workspace_area.x,
-            footer_y,
-            workspace_area.width,
-            " new",
-            Style::default().fg(palette.overlay0),
-        );
-        let dot = state.update_badge.accent_style(palette);
-        let launcher_width = if dot.is_some() { 8 } else { 6 };
-        let launcher_width = launcher_width.min(workspace_area.width);
-        hits.global_launcher = Rect::new(
-            workspace_area.right().saturating_sub(launcher_width),
-            footer_y,
-            launcher_width,
-            1,
-        );
-        put_right_text(
-            buffer,
-            workspace_area,
-            footer_y,
-            "menu",
-            Style::default().fg(palette.overlay0),
-        );
-        if let Some(style) = dot.filter(|_| workspace_area.width >= 6) {
-            put_text(
-                buffer,
-                workspace_area.right().saturating_sub(6),
-                footer_y,
-                2,
-                "● ",
-                style,
-            );
-        }
-    }
-
+    let footer_rows = sidebar_footer_rows(detail_area.height);
+    let agent_area = Rect::new(
+        detail_area.x,
+        detail_area.y,
+        detail_area.width,
+        detail_area.height.saturating_sub(footer_rows),
+    );
     super::agents::render_agent_panel(
         buffer,
-        detail_area,
+        agent_area,
         snapshot,
         config,
         state.collapsed_agents,
@@ -272,9 +247,74 @@ pub(crate) fn render_sidebar(
         hits,
     );
 
+    render_sidebar_footer(buffer, area, detail_area, footer_rows, config, state, hits);
+}
+
+pub(crate) fn sidebar_footer_rows(detail_height: u16) -> u16 {
+    if detail_height >= 7 {
+        2
+    } else if detail_height >= 6 {
+        1
+    } else {
+        0
+    }
+}
+
+/// Bottom sidebar footer mirroring Herdr.app's `sidebar-footer` block:
+/// a top border rule above the `menu` launcher (with update dot) on the
+/// left and the sidebar collapse toggle (`«`) on the right.
+pub(crate) fn render_sidebar_footer(
+    buffer: &mut Buffer,
+    area: Rect,
+    detail_area: Rect,
+    footer_rows: u16,
+    config: &super::ClientShellConfig,
+    state: &ShellRenderState<'_>,
+    hits: &mut ShellHitMap,
+) {
+    let palette = &config.palette;
+    if footer_rows >= 2 && detail_area.width > 0 {
+        let border_y = area.bottom().saturating_sub(2);
+        put_text(
+            buffer,
+            detail_area.x,
+            border_y,
+            detail_area.width,
+            &"─".repeat(detail_area.width as usize),
+            Style::default().fg(palette.surface_dim),
+        );
+    }
+    let footer_y = area.bottom().saturating_sub(1);
+    if config.mouse_capture && footer_rows >= 1 && detail_area.width > 2 {
+        let dot = state.update_badge.accent_style(palette);
+        let launcher_width = if dot.is_some() { 8 } else { 6 };
+        let max_width = detail_area.width.saturating_sub(2);
+        let launcher_width = launcher_width.min(max_width);
+        hits.global_launcher = Rect::new(detail_area.x, footer_y, launcher_width, 1);
+        if let Some(style) = dot.filter(|_| max_width >= 7) {
+            put_text(buffer, detail_area.x, footer_y, 2, " ●", style);
+            put_text(
+                buffer,
+                detail_area.x.saturating_add(2),
+                footer_y,
+                max_width.saturating_sub(2),
+                " menu",
+                Style::default().fg(palette.overlay0),
+            );
+        } else {
+            put_text(
+                buffer,
+                detail_area.x,
+                footer_y,
+                max_width,
+                " menu",
+                Style::default().fg(palette.overlay0),
+            );
+        }
+    }
     hits.sidebar_toggle = Rect::new(
         area.right().saturating_sub(2),
-        area.bottom().saturating_sub(1),
+        footer_y,
         u16::from(area.width > 1),
         u16::from(area.height > 0),
     );

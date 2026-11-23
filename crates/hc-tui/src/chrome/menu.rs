@@ -42,11 +42,17 @@ pub(crate) enum ContextMenuAction {
     Keep,
     Park,
     Kill,
+    Settings,
+    Keybinds,
+    Update,
+    Detach,
 }
 
 #[derive(Debug)]
 pub(crate) enum ContextMenuTarget {
+    Global,
     Workspace {
+        endpoint_id: super::snapshot::ClientEndpointId,
         workspace_id: String,
         is_git: bool,
         is_linked_worktree: bool,
@@ -66,9 +72,13 @@ pub(crate) enum ContextMenuTarget {
         right_click_passthrough: bool,
     },
     /// `None` is the Local row; `Some(name)` a `machine.list` entry.
-    Machine { name: Option<String> },
+    Machine {
+        name: Option<String>,
+    },
     /// hc-tui extension: the agent row menu (parity.md).
-    Agent { pane_id: String },
+    Agent {
+        pane_id: String,
+    },
 }
 
 #[derive(Debug)]
@@ -90,6 +100,13 @@ impl ContextMenu {
 
         let item = |label, action| ContextMenuItem { label, action };
         match &self.target {
+            ContextMenuTarget::Global => vec![
+                item("Settings", Action::Settings),
+                item("Keybinds", Action::Keybinds),
+                item("Add machine", Action::MachineAdd),
+                item("Update", Action::Update),
+                item("Detach", Action::Detach),
+            ],
             ContextMenuTarget::Workspace { is_git: false, .. } => {
                 vec![item("Rename", Action::Rename), item("Close", Action::Close)]
             }

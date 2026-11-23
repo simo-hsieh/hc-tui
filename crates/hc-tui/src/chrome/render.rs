@@ -240,6 +240,7 @@ pub(crate) fn render_shell(
         hits.agent_scrollbar = Rect::default();
         hits.agent_sort_toggle = Rect::default();
         hits.new_workspace = Rect::default();
+        hits.global_launcher = Rect::default();
         hits.machines.clear();
         hits.workspaces.clear();
         hits.agents.clear();

@@ -11,6 +11,9 @@ use crossterm::event::{KeyCode, KeyModifiers};
 
 pub(super) enum Target {
     NewTab(Box<Creation>, String),
+    NewWorkspacePath {
+        machine: Option<String>,
+    },
     NewWorkspace(Box<Creation>, String),
     Workspace {
         key: String,
@@ -92,28 +95,19 @@ impl App {
             self.submit_action(Action::Create(Box::new(creation)));
         }
     }
-    /// `new_workspace` binding: prompt with the derived label when
-    /// `prompt_new_workspace_name` is set, else create directly — matching
-    /// the reference's `open_new_workspace_overlay`/direct create.
+    /// `new_workspace` binding: prompt for the folder/path (prefilled with the
+    /// active workspace/terminal folder or local cwd, and working even when
+    /// empty), then create or chain into the name prompt when
+    /// `prompt_new_workspace_name` is set.
     pub(super) fn new_workspace(&mut self) {
-        let (creation, suggested) = match self.workspace_creation() {
-            Ok(pair) => pair,
-            Err(e) => {
-                self.show_notice("New workspace unavailable", &e);
-                return;
-            }
-        };
-        if self.shell.prompt_new_workspace_name {
-            self.open_dialog(
-                Target::NewWorkspace(Box::new(creation), suggested.clone()),
-                Body::Rename(Rename {
-                    title: "new workspace",
-                    input: TextEditor::new(&suggested, true),
-                }),
-            );
-        } else {
-            self.submit_action(Action::Create(Box::new(creation)));
-        }
+        let (machine, default_cwd) = self.default_new_workspace_target();
+        self.open_dialog(
+            Target::NewWorkspacePath { machine },
+            Body::Rename(Rename {
+                title: "new workspace path",
+                input: TextEditor::new(&default_cwd, true),
+            }),
+        );
     }
 
     /// `rename_workspace` on the focused workspace.
@@ -301,6 +295,27 @@ impl App {
                     *label = if name == default { String::new() } else { name };
                 }
                 Some(Action::Create(creation))
+            }
+            Target::NewWorkspacePath { machine } => {
+                let (creation, suggested) =
+                    match self.workspace_creation_in(machine.as_deref(), &name) {
+                        Ok(pair) => pair,
+                        Err(e) => {
+                            self.show_notice("New workspace unavailable", &e);
+                            return;
+                        }
+                    };
+                if self.shell.prompt_new_workspace_name {
+                    self.open_dialog(
+                        Target::NewWorkspace(Box::new(creation), suggested.clone()),
+                        Body::Rename(Rename {
+                            title: "new workspace",
+                            input: TextEditor::new(&suggested, true),
+                        }),
+                    );
+                    return;
+                }
+                Some(Action::Create(Box::new(creation)))
             }
             Target::NewWorkspace(mut creation, suggested) => {
                 // Same rule as the reference: empty input or the derived

@@ -1,4 +1,5 @@
 use super::{ContextMenu, ContextMenuTarget};
+use crate::chrome::snapshot::ClientEndpointId;
 
 fn labels(menu: &ContextMenu) -> Vec<&'static str> {
     menu.items().iter().map(|item| item.label).collect()
@@ -17,6 +18,7 @@ fn menu(target: ContextMenuTarget) -> ContextMenu {
 fn workspace_items_match_reference() {
     // Non-git workspace: rename/close only.
     let plain = menu(ContextMenuTarget::Workspace {
+        endpoint_id: ClientEndpointId::Local,
         workspace_id: "s".into(),
         is_git: false,
         is_linked_worktree: false,
@@ -27,6 +29,7 @@ fn workspace_items_match_reference() {
     assert_eq!(labels(&plain), ["Rename", "Close"]);
     // A git checkout without worktree children gains the worktree rows.
     let git = menu(ContextMenuTarget::Workspace {
+        endpoint_id: ClientEndpointId::Local,
         workspace_id: "s".into(),
         is_git: true,
         is_linked_worktree: false,
@@ -39,6 +42,7 @@ fn workspace_items_match_reference() {
         ["Rename", "Close", "New worktree", "Open worktree..."]
     );
     let linked = menu(ContextMenuTarget::Workspace {
+        endpoint_id: ClientEndpointId::Local,
         workspace_id: "s".into(),
         is_git: true,
         is_linked_worktree: true,
@@ -51,6 +55,7 @@ fn workspace_items_match_reference() {
         ["Rename", "Close", "Delete worktree checkout..."]
     );
     let parent = menu(ContextMenuTarget::Workspace {
+        endpoint_id: ClientEndpointId::Local,
         workspace_id: "s".into(),
         is_git: true,
         is_linked_worktree: false,
@@ -131,5 +136,14 @@ fn machine_items_are_the_hc_tui_extension() {
     assert_eq!(
         labels(&remote),
         ["Connect", "Rename machine", "Remove machine"]
+    );
+}
+
+#[test]
+fn global_menu_lists_launcher_actions() {
+    let global = menu(ContextMenuTarget::Global);
+    assert_eq!(
+        labels(&global),
+        ["Settings", "Keybinds", "Add machine", "Update", "Detach"]
     );
 }

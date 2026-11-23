@@ -11,11 +11,11 @@ use ratatui::{
 use super::endpoints::collapsed_groups_for_endpoint;
 use super::render::{
     MachineHit, ShellHitMap, ShellRenderState, WORKSPACE_HEADER_ROWS, WorkspaceHit, display_width,
-    put_right_text, put_text, put_version_badge,
+    put_text, put_version_badge,
 };
 use super::sidebar_render::{
-    displayed_workspace_status, render_parent_group_toggle, render_workspace_rows,
-    workspace_entries, workspace_rows,
+    displayed_workspace_status, render_parent_group_toggle, render_sidebar_footer,
+    render_workspace_rows, sidebar_footer_rows, workspace_entries, workspace_rows,
 };
 use super::snapshot::{ClientEndpointStatus, ClientShellSnapshot};
 use super::spans::{expanded_sidebar_sections, sidebar_section_divider_rect};
@@ -94,13 +94,32 @@ pub(crate) fn render_expanded(
             );
         }
     }
+    if config.mouse_capture && workspace_area.height > 1 {
+        let new_y = workspace_area.y.saturating_add(1);
+        let label = format!(
+            " + new · {}",
+            super::endpoint_sidebar_row::active_endpoint_label(state)
+        );
+        hits.new_workspace = Rect::new(
+            workspace_area.x,
+            new_y,
+            display_width(&label).min(workspace_area.width),
+            1,
+        );
+        put_text(
+            buffer,
+            workspace_area.x,
+            new_y,
+            workspace_area.width,
+            &label,
+            Style::default().fg(palette.overlay0),
+        );
+    }
     let body = Rect::new(
         workspace_area.x,
         workspace_area.y.saturating_add(WORKSPACE_HEADER_ROWS),
         workspace_area.width,
-        workspace_area
-            .height
-            .saturating_sub(WORKSPACE_HEADER_ROWS + 1),
+        workspace_area.height.saturating_sub(WORKSPACE_HEADER_ROWS),
     );
     hits.workspace_body = body;
     let row_heights = rows
@@ -305,56 +324,16 @@ pub(crate) fn render_expanded(
         super::scroll::render_list_scrollbar(buffer, track, metrics, palette);
     }
 
-    let footer_y = workspace_area.bottom().saturating_sub(1);
-    if config.mouse_capture {
-        let label = format!(
-            " new · {}",
-            super::endpoint_sidebar_row::active_endpoint_label(state)
-        );
-        hits.new_workspace = Rect::new(
-            workspace_area.x,
-            footer_y,
-            display_width(&label).min(workspace_area.width),
-            u16::from(workspace_area.height > 0),
-        );
-        put_text(
-            buffer,
-            workspace_area.x,
-            footer_y,
-            workspace_area.width,
-            &label,
-            Style::default().fg(palette.overlay0),
-        );
-        let dot = state.update_badge.accent_style(palette);
-        let width = if dot.is_some() { 8 } else { 6 };
-        let width = width.min(workspace_area.width);
-        hits.global_launcher = Rect::new(
-            workspace_area.right().saturating_sub(width),
-            footer_y,
-            width,
-            1,
-        );
-        put_right_text(
-            buffer,
-            workspace_area,
-            footer_y,
-            "menu",
-            Style::default().fg(palette.overlay0),
-        );
-        if let Some(style) = dot.filter(|_| workspace_area.width >= 6) {
-            put_text(
-                buffer,
-                workspace_area.right().saturating_sub(6),
-                footer_y,
-                2,
-                "● ",
-                style,
-            );
-        }
-    }
+    let footer_rows = sidebar_footer_rows(detail_area.height);
+    let agent_area = Rect::new(
+        detail_area.x,
+        detail_area.y,
+        detail_area.width,
+        detail_area.height.saturating_sub(footer_rows),
+    );
     super::endpoint_agents::render_expanded(
         buffer,
-        detail_area,
+        agent_area,
         active_snapshot.and_then(|snapshot| snapshot.agent_view_label.as_deref()),
         state.endpoints,
         state.active_endpoint_id,
@@ -364,18 +343,5 @@ pub(crate) fn render_expanded(
         state.reveal_focused_agent,
         hits,
     );
-    hits.sidebar_toggle = Rect::new(
-        area.right().saturating_sub(2),
-        area.bottom().saturating_sub(1),
-        u16::from(area.width > 1),
-        u16::from(area.height > 0),
-    );
-    put_text(
-        buffer,
-        hits.sidebar_toggle.x,
-        hits.sidebar_toggle.y,
-        hits.sidebar_toggle.width,
-        "«",
-        Style::default().fg(palette.overlay0),
-    );
+    render_sidebar_footer(buffer, area, detail_area, footer_rows, config, state, hits);
 }
