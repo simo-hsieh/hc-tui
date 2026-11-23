@@ -160,13 +160,14 @@ pub(super) fn structured_snapshot_from_spaces(
                 });
                 if is_agent(term) {
                     let record = selection.and_then(|selected| selected.status(term));
+                    let app = record.map(|s| clean(&s.app)).filter(|a| !a.is_empty());
                     agents.push(ClientShellAgent {
                         pane_id: term.address.clone(),
                         workspace_id: workspace_id.clone(),
                         tab_id: tab_id.clone(),
                         name: term.name.as_deref().map(clean),
-                        display_agent: record.map(|s| clean(&s.app)).filter(|a| !a.is_empty()),
-                        agent: record.map(|s| clean(&s.app)).filter(|a| !a.is_empty()),
+                        display_agent: agent_display_label(app.as_deref(), term),
+                        agent: app,
                         // `title` is the reported status title;
                         // `terminal_title` is the program's OSC title —
                         // distinct slots, never swapped.
@@ -343,6 +344,63 @@ pub(super) fn structured_snapshot_from_spaces(
     )
 }
 
+fn agent_display_label(app: Option<&str>, term: &Terminal) -> Option<String> {
+    let model = term
+        .labels
+        .get("herdr.model")
+        .map(String::as_str)
+        .or_else(|| {
+            term.foreground
+                .as_ref()
+                .and_then(|fg| extract_model_flag(&fg.argv))
+        })
+        .or_else(|| extract_model_flag(&term.argv));
+    format_agent_display(app, model)
+}
+
+fn format_agent_display(app: Option<&str>, raw_model: Option<&str>) -> Option<String> {
+    let model = raw_model
+        .map(normalize_model_name)
+        .filter(|m| !m.is_empty());
+    let Some(model) = model else {
+        return app.map(str::to_string);
+    };
+    let harness = match app {
+        Some("antigravity") => "agy",
+        Some("claude-code") => "claude",
+        Some(other) if !other.is_empty() => other,
+        _ => return Some(model),
+    };
+    Some(format!("{harness} · {model}"))
+}
+
+fn extract_model_flag(argv: &[String]) -> Option<&str> {
+    let mut iter = argv.iter();
+    while let Some(arg) = iter.next() {
+        if arg == "--model" || arg == "-m" {
+            return iter.next().map(String::as_str);
+        }
+        if let Some(value) = arg.strip_prefix("--model=") {
+            return Some(value);
+        }
+    }
+    None
+}
+
+fn normalize_model_name(raw: &str) -> String {
+    let trimmed = clean(raw);
+    let after_slash = trimmed.rsplit('/').next().unwrap_or(&trimmed);
+    let before_colon = after_slash.split(':').next().unwrap_or(after_slash);
+    let stripped = before_colon
+        .strip_suffix("-xhigh")
+        .or_else(|| before_colon.strip_suffix("-medium"))
+        .or_else(|| before_colon.strip_suffix("-high"))
+        .or_else(|| before_colon.strip_suffix("-low"))
+        .or_else(|| before_colon.strip_suffix("-max"))
+        .unwrap_or(before_colon);
+    stripped.to_string()
+}
+
 #[cfg(test)]
 pub(super) fn endpoint_snapshot(
     terms: &[&Terminal],
@@ -360,4 +418,42 @@ pub(super) fn endpoint_snapshot(
         None,
     )
     .0
+}
+
+#[cfg(test)]
+mod display_label_tests {
+    use super::*;
+
+    #[test]
+    fn formats_harness_dot_model_from_argv_and_falls_back_without_model() {
+        assert_eq!(
+            format_agent_display(Some("pi"), None).as_deref(),
+            Some("pi")
+        );
+
+        let agy_argv = vec![
+            "agy".into(),
+            "--model".into(),
+            "gemini-4-hydrogen-medium".into(),
+        ];
+        assert_eq!(
+            format_agent_display(Some("antigravity"), extract_model_flag(&agy_argv)).as_deref(),
+            Some("agy · gemini-4-hydrogen")
+        );
+
+        let pi_argv = vec![
+            "env".into(),
+            "pi".into(),
+            "--model=openai-codex/gpt-6.2-sol:medium".into(),
+        ];
+        assert_eq!(
+            format_agent_display(Some("pi"), extract_model_flag(&pi_argv)).as_deref(),
+            Some("pi · gpt-6.2-sol")
+        );
+
+        assert_eq!(
+            format_agent_display(Some("claude-code"), Some("claude-sonnet-5-5")).as_deref(),
+            Some("claude · claude-sonnet-5-5")
+        );
+    }
 }
