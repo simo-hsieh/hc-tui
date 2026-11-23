@@ -114,7 +114,11 @@ fn app_node(
 /// Foreign document versions and malformed individual entries are tolerated.
 /// Only terminal membership matters: never execute mod data or rewrite it.
 pub fn read(terms: &[&Terminal], document: &Value, machine: Option<&str>) -> Vec<Space> {
-    let allowed = terms.iter().map(|t| t.address.as_str()).collect();
+    let allowed = terms
+        .iter()
+        .filter(|t| !(t.state == "finished" && t.reason.as_deref() == Some("killed")))
+        .map(|t| t.address.as_str())
+        .collect();
     let mut used = BTreeSet::new();
     let mut ids = BTreeSet::new();
     let mut spaces = Vec::new();

@@ -167,38 +167,57 @@ impl App {
             }),
         })
     }
-    /// Default `(machine, cwd)` for a new workspace — works even when the
-    /// shell has no focused terminal or workspace yet.
-    pub(super) fn default_new_workspace_target(&self) -> (Option<String>, String) {
-        let terminal = self
-            .focused
-            .as_ref()
-            .and_then(|id| self.view.inventory.get(id));
-        let machine = terminal
-            .and_then(|t| t.address.split_once('/').map(|(m, _)| m.to_owned()))
-            .or_else(|| match &self.projection.active_endpoint_id {
-                crate::chrome::snapshot::ClientEndpointId::Local => None,
-                crate::chrome::snapshot::ClientEndpointId::Remote(name) => Some(name.clone()),
-            });
-        let workspace_cwd = self
+    /// Default folder path for a new workspace on `machine`, working even
+    /// when `machine` is not the active endpoint or the shell is empty.
+    pub(super) fn default_new_workspace_cwd_for(&self, machine: Option<&str>) -> String {
+        let target_endpoint = match machine {
+            None => crate::chrome::snapshot::ClientEndpointId::Local,
+            Some(name) => crate::chrome::snapshot::ClientEndpointId::Remote(name.to_owned()),
+        };
+        if target_endpoint == self.projection.active_endpoint_id {
+            let workspace_cwd = self
+                .projection
+                .snapshot
+                .focused_workspace_id
+                .as_ref()
+                .and_then(|id| {
+                    self.projection
+                        .snapshot
+                        .workspaces
+                        .iter()
+                        .find(|w| &w.workspace_id == id)
+                })
+                .map(|w| w.new_workspace_cwd.as_str())
+                .filter(|s| !s.is_empty());
+            if let Some(cwd) = workspace_cwd {
+                return cwd.to_owned();
+            }
+            if let Some(cwd) = self
+                .focused
+                .as_ref()
+                .and_then(|id| self.view.inventory.get(id))
+                .map(|t| t.cwd.as_str())
+                .filter(|s| !s.is_empty())
+            {
+                return cwd.to_owned();
+            }
+        }
+        if let Some(cwd) = self
             .projection
-            .snapshot
-            .focused_workspace_id
-            .as_ref()
-            .and_then(|id| {
-                self.projection
-                    .snapshot
-                    .workspaces
+            .endpoints
+            .iter()
+            .find(|e| e.endpoint_id == target_endpoint)
+            .and_then(|e| e.snapshot.as_deref())
+            .and_then(|s| {
+                s.workspaces
                     .iter()
-                    .find(|w| &w.workspace_id == id)
+                    .find(|w| !w.new_workspace_cwd.is_empty())
+                    .map(|w| w.new_workspace_cwd.as_str())
             })
-            .map(|w| w.new_workspace_cwd.as_str())
-            .filter(|s| !s.is_empty());
-        let cwd = if let Some(cwd) = workspace_cwd {
-            cwd.to_owned()
-        } else if let Some(cwd) = terminal.map(|t| t.cwd.as_str()).filter(|s| !s.is_empty()) {
-            cwd.to_owned()
-        } else if machine.is_none() {
+        {
+            return cwd.to_owned();
+        }
+        if machine.is_none() {
             std::env::current_dir()
                 .ok()
                 .map(|p| p.to_string_lossy().into_owned())
@@ -206,7 +225,22 @@ impl App {
                 .unwrap_or_default()
         } else {
             String::new()
-        };
+        }
+    }
+
+    /// Default `(machine, cwd)` for a new workspace — works even when the
+    /// shell has no focused terminal or workspace yet.
+    pub(super) fn default_new_workspace_target(&self) -> (Option<String>, String) {
+        let machine = self
+            .focused
+            .as_ref()
+            .and_then(|id| self.view.inventory.get(id))
+            .and_then(|t| t.address.split_once('/').map(|(m, _)| m.to_owned()))
+            .or_else(|| match &self.projection.active_endpoint_id {
+                crate::chrome::snapshot::ClientEndpointId::Local => None,
+                crate::chrome::snapshot::ClientEndpointId::Remote(name) => Some(name.clone()),
+            });
+        let cwd = self.default_new_workspace_cwd_for(machine.as_deref());
         (machine, cwd)
     }
 
@@ -253,6 +287,7 @@ impl App {
                 env: program_env(),
                 labels: BTreeMap::from([
                     ("herdr.space".into(), raw_space.clone()),
+                    ("herdr.space.name".into(), suggested.clone()),
                     ("herdr.tab".into(), raw_tab.clone()),
                     ("herdr.seen".into(), "0".into()),
                 ]),

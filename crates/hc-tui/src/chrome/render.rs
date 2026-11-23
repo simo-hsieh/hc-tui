@@ -59,6 +59,7 @@ pub(crate) struct MachineHit {
     pub rect: Rect,
     pub status_badge: Rect,
     pub collapse_toggle: Rect,
+    pub new_workspace: Rect,
     pub endpoint_id: ClientEndpointId,
 }
 

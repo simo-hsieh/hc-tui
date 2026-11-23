@@ -10,8 +10,7 @@ use ratatui::{
 
 use super::endpoints::collapsed_groups_for_endpoint;
 use super::render::{
-    MachineHit, ShellHitMap, ShellRenderState, WORKSPACE_HEADER_ROWS, WorkspaceHit, display_width,
-    put_text, put_version_badge,
+    MachineHit, ShellHitMap, ShellRenderState, WorkspaceHit, put_text, put_version_badge,
 };
 use super::sidebar_render::{
     displayed_workspace_status, render_parent_group_toggle, render_sidebar_footer,
@@ -94,32 +93,13 @@ pub(crate) fn render_expanded(
             );
         }
     }
-    if config.mouse_capture && workspace_area.height > 1 {
-        let new_y = workspace_area.y.saturating_add(1);
-        let label = format!(
-            " + new · {}",
-            super::endpoint_sidebar_row::active_endpoint_label(state)
-        );
-        hits.new_workspace = Rect::new(
-            workspace_area.x,
-            new_y,
-            display_width(&label).min(workspace_area.width),
-            1,
-        );
-        put_text(
-            buffer,
-            workspace_area.x,
-            new_y,
-            workspace_area.width,
-            &label,
-            Style::default().fg(palette.overlay0),
-        );
-    }
+    // Per-machine `+` sits inline on every online endpoint row (Herdr.app
+    // parity), so the machine list starts directly below the `spaces` header.
     let body = Rect::new(
         workspace_area.x,
-        workspace_area.y.saturating_add(WORKSPACE_HEADER_ROWS),
+        workspace_area.y.saturating_add(1),
         workspace_area.width,
-        workspace_area.height.saturating_sub(WORKSPACE_HEADER_ROWS),
+        workspace_area.height.saturating_sub(1),
     );
     hits.workspace_body = body;
     let row_heights = rows
@@ -225,15 +205,17 @@ pub(crate) fn render_expanded(
                 let rect = Rect::new(body.x, y, content_width, 1);
                 let collapsed = state.collapsed_endpoints.contains(&endpoint.endpoint_id);
                 let marker = if collapsed { "▸" } else { "▾" };
-                let status_badge = super::endpoint_sidebar_row::render_endpoint_row(
-                    buffer,
-                    rect,
-                    marker,
-                    endpoint,
-                    collapsed && &endpoint.endpoint_id == state.active_endpoint_id,
-                    state.machine_diagnostics,
-                    palette,
-                );
+                let (status_badge, new_workspace) =
+                    super::endpoint_sidebar_row::render_endpoint_row(
+                        buffer,
+                        rect,
+                        marker,
+                        endpoint,
+                        collapsed && &endpoint.endpoint_id == state.active_endpoint_id,
+                        config.mouse_capture,
+                        state.machine_diagnostics,
+                        palette,
+                    );
                 hits.machines.push(MachineHit {
                     rect,
                     status_badge,
@@ -243,6 +225,7 @@ pub(crate) fn render_expanded(
                         u16::from(rect.width > 1),
                         1,
                     ),
+                    new_workspace,
                     endpoint_id: endpoint.endpoint_id.clone(),
                 });
                 y = y

@@ -6,28 +6,20 @@ use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 
 use super::palette::Palette;
-use super::render::{
-    MachineDiagnostics, ShellRenderState, display_width, put_right_text, put_text,
-};
+use super::render::{MachineDiagnostics, display_width, put_right_text, put_text};
 use super::snapshot::{ClientEndpointStatus, ClientShellEndpoint};
 
-pub(super) fn active_endpoint_label<'a>(state: &'a ShellRenderState<'_>) -> &'a str {
-    state
-        .endpoints
-        .iter()
-        .find(|endpoint| &endpoint.endpoint_id == state.active_endpoint_id)
-        .map_or("Local", |endpoint| endpoint.label.as_str())
-}
-
+#[allow(clippy::too_many_arguments)]
 pub(super) fn render_endpoint_row(
     buffer: &mut Buffer,
     rect: Rect,
     marker: &str,
     endpoint: &ClientShellEndpoint,
     highlighted: bool,
+    mouse_capture: bool,
     auth: &MachineDiagnostics,
     palette: &Palette,
-) -> Rect {
+) -> (Rect, Rect) {
     if highlighted {
         buffer.set_style(rect, Style::default().bg(palette.active_row_bg));
     }
@@ -50,11 +42,15 @@ pub(super) fn render_endpoint_row(
         format!("{glyph} {state}")
     };
     let signal_width = display_width(&signal).min(rect.width);
+    let show_add =
+        mouse_capture && endpoint.status == ClientEndpointStatus::Online && rect.width >= 6;
+    let add_width = if show_add { 2u16 } else { 0u16 };
+    let right_reserve = signal_width.saturating_add(add_width);
     put_text(
         buffer,
         rect.x,
         rect.y,
-        rect.width.saturating_sub(signal_width.saturating_add(1)),
+        rect.width.saturating_sub(right_reserve.saturating_add(1)),
         &format!(" {marker} {}", endpoint.label),
         Style::default()
             .fg(
@@ -66,6 +62,22 @@ pub(super) fn render_endpoint_row(
             )
             .add_modifier(Modifier::BOLD),
     );
+    let new_workspace = if show_add {
+        let add_x = rect
+            .right()
+            .saturating_sub(signal_width.saturating_add(add_width));
+        put_text(
+            buffer,
+            add_x,
+            rect.y,
+            add_width,
+            "+ ",
+            Style::default().fg(palette.overlay0),
+        );
+        Rect::new(add_x, rect.y, add_width, 1)
+    } else {
+        Rect::default()
+    };
     put_right_text(
         buffer,
         rect,
@@ -73,10 +85,11 @@ pub(super) fn render_endpoint_row(
         &signal,
         auth.badge_style(endpoint, palette, Style::default().fg(color)),
     );
-    Rect::new(
+    let status_badge = Rect::new(
         rect.right().saturating_sub(signal_width),
         rect.y,
         signal_width,
         1,
-    )
+    );
+    (status_badge, new_workspace)
 }

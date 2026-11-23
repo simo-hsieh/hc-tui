@@ -110,6 +110,19 @@ impl App {
         );
     }
 
+    /// Create a workspace targeting an explicit machine (from the inline `+`
+    /// button on a machine row in the multi-endpoint sidebar).
+    pub(super) fn new_workspace_on(&mut self, machine: Option<String>) {
+        let default_cwd = self.default_new_workspace_cwd_for(machine.as_deref());
+        self.open_dialog(
+            Target::NewWorkspacePath { machine },
+            Body::Rename(Rename {
+                title: "new workspace path",
+                input: TextEditor::new(&default_cwd, true),
+            }),
+        );
+    }
+
     /// `rename_workspace` on the focused workspace.
     pub(super) fn rename_workspace(&mut self) {
         if let Some(id) = self.projection.snapshot.focused_workspace_id.clone() {
@@ -321,8 +334,13 @@ impl App {
                 // Same rule as the reference: empty input or the derived
                 // label means the automatic name (custom_label stays off).
                 let custom = !name.is_empty() && name != suggested;
+                let final_name = if custom { name } else { suggested };
+                creation
+                    .params
+                    .labels
+                    .insert("herdr.space.name".into(), final_name.clone());
                 if let Some(adoption) = &mut creation.space_adoption {
-                    adoption.name = if custom { name } else { suggested };
+                    adoption.name = final_name;
                     adoption.custom_label = custom;
                 }
                 Some(Action::Create(creation))

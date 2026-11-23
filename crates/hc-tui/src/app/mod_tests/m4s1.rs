@@ -109,6 +109,7 @@ async fn a_machine_connect_activation_reaches_the_wire_without_a_dialog() {
         rect: Rect::new(0, 0, 12, 1),
         status_badge: Rect::default(),
         collapse_toggle: Rect::default(),
+        new_workspace: Rect::default(),
         endpoint_id: ClientEndpointId::Remote("host-b".into()),
     });
     app.context_menu_press((1, 0));
@@ -605,6 +606,77 @@ async fn new_workspace_accepts_custom_path_and_works_when_empty() {
     assert!(app.dialog.is_some());
     clear_rename(&mut app);
     app.insert_dialog_text("/home/user/acme-shop");
+    app.dialog_key(&press(Key::Enter));
+    assert_eq!(app.pending_actions, 1);
+    settle(&mut app).await;
+    assert_eq!(app.pending_actions, 0);
+    assert!(app.notice.is_none());
+    server.await.unwrap();
+}
+
+#[tokio::test]
+async fn inline_machine_plus_creates_workspace_on_non_active_machine_with_space_name_label() {
+    use super::endpoint_nav::{app_multi, spaced_term};
+    use crate::sidebar::fixture::machine;
+
+    let mut app = app_multi(
+        vec![spaced_term("t1", "local-ws")],
+        vec![machine("host-a", "connected")],
+    );
+    pending(&mut app);
+    app.focused = Some("t1".into());
+    app.refresh_projection();
+    app.area = (120, 40);
+    draw_to(&mut app, 120, 40);
+
+    let remote_hit = app
+        .hit_map
+        .machines
+        .iter()
+        .find(|h| h.endpoint_id == ClientEndpointId::Remote("host-a".into()))
+        .expect("remote machine hit")
+        .clone();
+    assert!(
+        !remote_hit.new_workspace.is_empty(),
+        "online remote machine row exposes inline + hit"
+    );
+
+    let mut rx = operations(&mut app);
+    let server = tokio::spawn(async move {
+        let mut core = rx.recv().await.unwrap();
+        core.read_hello().await;
+        core.answer_hello(true, &["doc.get", "doc.set", "terminal.run"], &[])
+            .await;
+        for _ in 0..2 {
+            let read = core.read_request().await;
+            core.reply(&read["id"], json!({"value":null,"version":0}))
+                .await;
+        }
+        let run = core.read_request().await;
+        assert_eq!(run["method"], "terminal.run");
+        assert_eq!(run["params"]["on"], "host-a");
+        assert_eq!(run["params"]["cwd"], "/srv/api");
+        assert_eq!(run["params"]["labels"]["herdr.space.name"], "api");
+        let mut terminal = testcore::minimal_terminal();
+        terminal["address"] = json!("host-a/t2");
+        terminal["cwd"] = json!("/srv/api");
+        core.reply(&run["id"], terminal).await;
+        let read = core.read_request().await;
+        core.reply(&read["id"], json!({"value":null,"version":0}))
+            .await;
+        let write = core.read_request().await;
+        core.reply(&write["id"], json!({"version":1})).await;
+    });
+
+    app.on_mouse(input::MouseInput {
+        kind: MouseEventKind::Down(MouseButton::Left),
+        col: remote_hit.new_workspace.x,
+        row: remote_hit.new_workspace.y,
+        mods: Mods::NONE,
+        sgr_position: None,
+    });
+    assert!(app.dialog.is_some());
+    app.insert_dialog_text("/srv/api");
     app.dialog_key(&press(Key::Enter));
     assert_eq!(app.pending_actions, 1);
     settle(&mut app).await;

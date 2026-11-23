@@ -104,6 +104,14 @@ impl App {
         // the endpoint — hc-tui is single-endpoint, so the toggle case
         // is the reachable one.
         if let Some(hit) = hits.machines.iter().find(|h| contains(h.rect, point)) {
+            if contains(hit.new_workspace, point) {
+                let machine = match &hit.endpoint_id {
+                    crate::chrome::snapshot::ClientEndpointId::Local => None,
+                    crate::chrome::snapshot::ClientEndpointId::Remote(name) => Some(name.clone()),
+                };
+                self.new_workspace_on(machine);
+                return;
+            }
             let id = hit.endpoint_id.clone();
             if (contains(hit.collapse_toggle, point)
                 || contains(hit.status_badge, point)

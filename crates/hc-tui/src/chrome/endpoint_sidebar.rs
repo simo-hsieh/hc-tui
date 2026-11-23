@@ -113,6 +113,7 @@ pub(crate) fn render_collapsed(
                 rect,
                 status_badge,
                 collapse_toggle: Rect::new(rect.x, rect.y, u16::from(rect.width > 1), 1),
+                new_workspace: Rect::default(),
                 endpoint_id: endpoint.endpoint_id.clone(),
             });
             y = y.saturating_add(1);
