@@ -4,6 +4,8 @@
 
 mod agent_list;
 pub(crate) mod agent_tree;
+#[cfg(test)]
+mod agent_tree_render_tests;
 pub mod agents;
 pub(crate) mod config_diagnostic;
 pub(crate) mod copy_feedback;

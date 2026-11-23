@@ -95,6 +95,7 @@ pub(crate) fn render_expanded(
         hits,
         target,
         |row| row.agent.rows.len(),
+        |row| row.agent.depth,
         |buffer, rect, row, hits| {
             super::agents::render_agent_row(buffer, rect, &row.agent, config, hits);
             if row.stale {

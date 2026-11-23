@@ -106,6 +106,7 @@ pub(crate) fn render_agent_panel(
         hits,
         target,
         |row| row.rows.len(),
+        |row| row.depth,
         |buffer, rect, row, hits| {
             hits.agents.push((rect, row.pane_id.clone()));
             render_agent_row(buffer, rect, row, config, hits);
@@ -239,6 +240,7 @@ pub(crate) fn render_agent_list<T>(
     hits: &mut ShellHitMap,
     reveal: Option<usize>,
     row_lines: impl Fn(&T) -> usize,
+    row_depth: impl Fn(&T) -> usize,
     mut render_row: impl FnMut(&mut Buffer, Rect, &T, &mut ShellHitMap),
 ) {
     let body = Rect::new(
@@ -273,11 +275,13 @@ pub(crate) fn render_agent_list<T>(
         .iter()
         .enumerate()
         .map(|(index, _)| {
-            if index + 1 < rows.len() {
-                config.agents.row_gap
-            } else {
-                0
-            }
+            rows.get(index + 1).map_or(0, |next| {
+                if config.agent_tree && row_depth(next) > 0 {
+                    0
+                } else {
+                    config.agents.row_gap
+                }
+            })
         })
         .collect::<Vec<_>>();
     if let Some(target) = reveal {
@@ -306,13 +310,7 @@ pub(crate) fn render_agent_list<T>(
         }
         let rect = Rect::new(body.x, y, content_width, height);
         render_row(buffer, rect, row, hits);
-        y = y
-            .saturating_add(height)
-            .saturating_add(if index + 1 < rows.len() {
-                config.agents.row_gap
-            } else {
-                0
-            });
+        y = y.saturating_add(height).saturating_add(gaps[index]);
     }
 
     if show_scrollbar {

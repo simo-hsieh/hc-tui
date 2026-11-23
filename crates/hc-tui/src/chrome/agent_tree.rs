@@ -201,19 +201,22 @@ fn visible_depth(depth: usize, width: u16) -> usize {
 }
 
 pub(crate) fn prefix(depth: usize, last: bool, guides: u8, width: u16) -> String {
-    let depth = visible_depth(depth, width);
-    if depth == 0 {
+    let d = visible_depth(depth, width);
+    if d == 0 {
         return String::new();
     }
-    let mut out = String::with_capacity(depth * 2);
-    for level in 0..(depth - 1) {
+    let mut out = String::with_capacity(d * 2);
+    for level in 0..(d - 1) {
         if (guides & (1u8 << level)) != 0 {
             out.push_str("│ ");
         } else {
             out.push_str("  ");
         }
     }
-    out.push_str(if last { "└─" } else { "├─" });
+    // When depth is clamped to `d`, an ancestor at `d` with a following sibling
+    // still needs the vertical guide to continue through this row.
+    let effective_last = last && (depth == d || (guides & (1u8 << (d - 1))) == 0);
+    out.push_str(if effective_last { "└─" } else { "├─" });
     out
 }
 
@@ -243,7 +246,8 @@ pub(crate) fn continuation_prefix(
             out.push_str("  ");
         }
     }
-    out.push_str(if last { "  " } else { "│ " });
+    let effective_last = last && (depth == d || (guides & (1u8 << (d - 1))) == 0);
+    out.push_str(if effective_last { "  " } else { "│ " });
     let child_visible = has_children && visible_depth(depth + 1, width) > d;
     out.push_str(if child_visible { "│ " } else { "  " });
     out
