@@ -10,7 +10,7 @@ A version suffix is never a capability check: `hello.result.features` and field 
 
 ## Versions
 
-- **Built and tested against:** official `hc` 0.1.21 (upstream `c7517808d64f06609e4ecf0db1757005373cc3a3`), the pin
+- **Built and tested against:** official `hc` 0.1.22 (upstream `6e2984629fcd600b0165f69b2e5b0bda5985ec1c`), the pin
   in [integration](integration.md), and the fork `0.1.21-followcat.1`.
 - **Older official cores:** supported. Anything from 0.1.18 on works; a member or method a core does not know is
   simply absent and its feature stays off. Two examples: `events.subscribe`'s `docs` (0.1.21) is ignored by older
