@@ -65,6 +65,10 @@ impl App {
         });
     }
     pub(super) fn new_tab(&mut self) {
+        if self.focused.is_none() {
+            self.new_workspace();
+            return;
+        }
         let creation = match self.creation(None, false) {
             Ok(c) => c,
             Err(e) => {
