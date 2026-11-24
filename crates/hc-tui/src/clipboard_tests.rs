@@ -72,7 +72,7 @@ impl StubDir {
     }
     #[cfg(target_os = "linux")]
     fn env(&self) -> ClipboardEnv {
-        let path = format!("{}:/usr/bin:/bin", self.0.display());
+        let path = format!("{}:/bin", self.0.display());
         ClipboardEnv {
             path: Some(path.into()),
             ..ClipboardEnv::default()

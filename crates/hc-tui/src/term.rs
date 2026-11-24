@@ -62,6 +62,13 @@ impl TermGuard {
     /// cleared first, then SGR button-reporting is enabled only when
     /// the config asks for it.
     pub fn enter(mouse_capture: bool) -> io::Result<TermGuard> {
+        use std::io::IsTerminal;
+        if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
+            return Err(io::Error::new(
+                io::ErrorKind::NotConnected,
+                "stdin and stdout must be terminals",
+            ));
+        }
         let mut out = io::stdout();
         let mut keyboard = false;
         let erase = host_erase_byte();

@@ -104,7 +104,12 @@ fn spawn_from(
     let (wake_read, wake_write) = UnixStream::pair()?;
     wake_read.set_nonblocking(true)?;
     wake_write.set_nonblocking(true)?;
-    let mut signals = Signals::new([signal_hook::consts::SIGWINCH])?;
+    let mut signals = Signals::new([
+        signal_hook::consts::SIGWINCH,
+        signal_hook::consts::SIGTERM,
+        signal_hook::consts::SIGHUP,
+        signal_hook::consts::SIGINT,
+    ])?;
     let control = Arc::new(Control::new(
         wake_write,
         signals.handle(),
@@ -150,11 +155,18 @@ fn spawn_from(
     let control = reader.control.clone();
     reader.signals = Some(
         std::thread::Builder::new()
-            .name("hc-sigwinch".into())
+            .name("hc-signals".into())
             .spawn(move || {
-                for _ in signals.forever() {
-                    if let Some(size) = terminal_size(input.as_raw_fd()) {
-                        control.resize(size);
+                for signal in signals.forever() {
+                    if signal == signal_hook::consts::SIGWINCH {
+                        if let Some(size) = terminal_size(input.as_raw_fd()) {
+                            control.resize(size);
+                        }
+                    } else {
+                        // SIGTERM / SIGHUP / SIGINT: close reader cleanly so the main
+                        // loop exits and TermGuard::drop restores host terminal modes.
+                        control.stop();
+                        break;
                     }
                 }
             })?,
