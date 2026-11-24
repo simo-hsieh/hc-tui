@@ -218,6 +218,9 @@ pub(crate) mod repository;
 pub(crate) fn tab_key_of(term: &Terminal) -> String {
     match term.labels.get("herdr.tab") {
         Some(tab) => format!("tab:{}:{}", tab.len(), tab),
+        None if term.parent.as_deref().is_some_and(|p| !p.is_empty()) => {
+            format!("tab:!:subagent:{}:{}", term.address.len(), term.address)
+        }
         None => "tab:!default".to_string(),
     }
 }

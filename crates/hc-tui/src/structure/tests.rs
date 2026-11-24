@@ -202,3 +202,58 @@ fn floating_terminals_keep_their_foreign_tab_membership() {
     assert_eq!(spaces.len(), 1);
     assert_eq!(spaces[0].tabs[0].root.terminals(), ["t1", "t2"]);
 }
+
+#[test]
+fn unlabelled_subagents_adopt_parent_space_with_independent_named_tabs() {
+    let mut parent = terminal("t1");
+    parent.cwd = "/home/user/proj".into();
+    parent.labels.insert("herdr.space".into(), "work".into());
+    parent.labels.insert("herdr.tab".into(), "main".into());
+
+    let mut child_a = terminal("t2");
+    child_a.cwd = "/home/user/other".into();
+    child_a.parent = Some("t1".into());
+    child_a.name = Some("worker-a".into());
+
+    let mut child_b = terminal("t3");
+    child_b.cwd = "/home/user/other".into();
+    child_b.parent = Some("t1".into());
+    child_b.name = Some("worker-b".into());
+    child_b
+        .labels
+        .insert("herdr.title".into(), "custom-title".into());
+
+    let spaces = read(&[&parent, &child_a, &child_b], &Value::Null, None);
+    assert_eq!(spaces.len(), 1);
+    assert_eq!(spaces[0].tabs.len(), 3);
+    assert_eq!(spaces[0].tabs[1].name, "worker-a");
+    assert_eq!(spaces[0].tabs[2].name, "custom-title");
+}
+
+#[test]
+fn unlabelled_and_unrenamed_same_folder_spaces_dedup_regardless_of_order() {
+    let mut plain = terminal("t1");
+    plain.cwd = "/home/user/app".into();
+    plain.created_ms = 10;
+
+    let mut opaque = terminal("t2");
+    opaque.cwd = "/home/user/app".into();
+    opaque.created_ms = 20;
+    opaque.labels.insert(
+        "herdr.space".into(),
+        "spb824f92689f06e2f09cc08311b5a048b".into(),
+    );
+
+    let mut custom = terminal("t3");
+    custom.cwd = "/home/user/app".into();
+    custom.created_ms = 30;
+    custom
+        .labels
+        .insert("herdr.space".into(), "named-space".into());
+
+    let spaces_forward = read(&[&plain, &opaque, &custom], &Value::Null, None);
+    assert_eq!(spaces_forward.len(), 2);
+
+    let spaces_reverse = read(&[&opaque, &plain, &custom], &Value::Null, None);
+    assert_eq!(spaces_reverse.len(), 2);
+}

@@ -205,15 +205,29 @@ pub fn read(terms: &[&Terminal], document: &Value, machine: Option<&str>) -> Vec
         .enumerate()
         .map(|(i, s)| (s.id.clone(), i))
         .collect::<BTreeMap<String, usize>>();
+    let mut term_spaces = BTreeMap::<String, usize>::new();
+    for (i, space) in spaces.iter().enumerate() {
+        for tab in &space.tabs {
+            for addr in tab.root.terminals() {
+                term_spaces.insert(addr, i);
+            }
+        }
+    }
     let app_tabs = spaces
         .iter()
         .flat_map(|s| s.tabs.iter().map(|t| t.id.clone()))
         .collect::<BTreeSet<_>>();
+    // Stable-partition non-subagent terminals before unlabelled subagents so a
+    // subagent can adopt its parent's space while preserving creation/numeric order.
+    rest.sort_by_key(|t| {
+        !t.labels.contains_key("herdr.space") && t.parent.as_deref().is_some_and(|p| !p.is_empty())
+    });
     let mut pending = BTreeMap::<(usize, String), Vec<String>>::new();
     for terminal in rest {
         let (key, label) = crate::project::space_of(terminal);
         let folder = crate::project::repository::folder(terminal);
         let folder_norm = folder.trim_end_matches('/');
+        let has_explicit_space = terminal.labels.contains_key("herdr.space");
         let has_named_space = terminal
             .labels
             .get("herdr.space.name")
@@ -222,15 +236,21 @@ pub fn read(terms: &[&Terminal], document: &Value, machine: Option<&str>) -> Vec
                 .labels
                 .get("herdr.space")
                 .is_some_and(|s| !crate::project::is_opaque_id(s));
-        let at = if let Some(&existing) = positions.get(&key) {
+        let parent_space = (!has_explicit_space)
+            .then(|| terminal.parent.as_deref().filter(|p| !p.is_empty()))
+            .flatten()
+            .and_then(|parent| term_spaces.get(parent).copied());
+        let at = if let Some(parent_idx) = parent_space {
+            parent_idx
+        } else if let Some(&existing) = positions.get(&key) {
             existing
         } else if !has_named_space
             && !folder_norm.is_empty()
-            && let Some(app_idx) = spaces
-                .iter()
-                .position(|s| s.from_app && s.folder.trim_end_matches('/') == folder_norm)
+            && let Some(same_folder_idx) = spaces.iter().position(|s| {
+                (s.from_app || !s.custom_name) && s.folder.trim_end_matches('/') == folder_norm
+            })
         {
-            app_idx
+            same_folder_idx
         } else {
             let idx = spaces.len();
             spaces.push(Space {
@@ -244,6 +264,7 @@ pub fn read(terms: &[&Terminal], document: &Value, machine: Option<&str>) -> Vec
             positions.insert(key.clone(), idx);
             idx
         };
+        term_spaces.insert(terminal.address.clone(), at);
         let space_key = &spaces[at].id;
         let tab_id = format!("{space_key}/{}", crate::project::tab_key_of(terminal));
         let tabs = &mut spaces[at].tabs;
@@ -258,20 +279,33 @@ pub fn read(terms: &[&Terminal], document: &Value, machine: Option<&str>) -> Vec
             // 128-bit hex identity (creation.rs `opaque_id`), which is
             // a grouping key, not a name: those fall back to the tab's
             // position number like the reference's `tab_name`.
-            let name = terminal
-                .labels
-                .get("herdr.tab")
-                .filter(|label| !crate::project::is_opaque_id(label))
-                .map(String::as_str);
-            let name = terminal
-                .labels
-                .get("herdr.tab.name")
-                .filter(|_| terminal.labels.contains_key("herdr.tab"))
-                .map(String::as_str)
-                .filter(|name| !name.is_empty())
-                .or(name)
-                .unwrap_or_default()
-                .to_owned();
+            let is_unlabelled_subagent = !terminal.labels.contains_key("herdr.tab")
+                && terminal.parent.as_deref().is_some_and(|p| !p.is_empty());
+            let name = if is_unlabelled_subagent {
+                terminal
+                    .labels
+                    .get("herdr.title")
+                    .map(String::as_str)
+                    .filter(|s| !s.is_empty())
+                    .or_else(|| terminal.name.as_deref().filter(|s| !s.is_empty()))
+                    .unwrap_or_default()
+                    .to_owned()
+            } else {
+                let name = terminal
+                    .labels
+                    .get("herdr.tab")
+                    .filter(|label| !crate::project::is_opaque_id(label))
+                    .map(String::as_str);
+                terminal
+                    .labels
+                    .get("herdr.tab.name")
+                    .filter(|_| terminal.labels.contains_key("herdr.tab"))
+                    .map(String::as_str)
+                    .filter(|name| !name.is_empty())
+                    .or(name)
+                    .unwrap_or_default()
+                    .to_owned()
+            };
             tabs.push(Tab {
                 id: tab_id,
                 custom_name: !name.is_empty(),
